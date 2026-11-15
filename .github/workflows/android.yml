@@ -202,7 +202,7 @@ jobs:
           cp "$APK" "out/$APK_NAME"
           ls -lh out
           # both ABIs must be inside, otherwise 32-bit phones cannot run it
-          for abi in arm64-v8a; do
+          for abi in armeabi-v7a arm64-v8a; do
             unzip -l "out/$APK_NAME" | grep -q "lib/$abi/libApplicationMain.so" || { echo "missing $abi"; exit 1; }
           done
 
