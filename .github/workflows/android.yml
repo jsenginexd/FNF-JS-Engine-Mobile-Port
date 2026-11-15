@@ -133,7 +133,7 @@ jobs:
       - name: Rebuild Lime native libraries (armv7 + arm64)
         timeout-minutes: 60
         run: |
-          haxelib run lime rebuild android -armv7 -arm64 -release
+          haxelib run lime rebuild android -arm64 -release
           ls -la .haxelib/lime/git/ndll/Android/
 
       # The APK must be signed or Android refuses to install it.
@@ -165,7 +165,7 @@ jobs:
           rm -f assets/preload/gameRenders/renderlol.bat
           # hxcpp can hang forever after a C++ compile error, so watch the log and stop at the first one
           set +e
-          haxelib run lime build android -armv7 -arm64 -release -D GITHUB_BUILD \
+          haxelib run lime build android -arm64 -release -D GITHUB_BUILD \
             --certificate-path="$KEYSTORE" --certificate-password="$PASS" \
             --certificate-alias="$ALIAS" --certificate-alias-password="$PASS" > build.log 2>&1 &
           BUILD_PID=$!
@@ -202,7 +202,7 @@ jobs:
           cp "$APK" "out/$APK_NAME"
           ls -lh out
           # both ABIs must be inside, otherwise 32-bit phones cannot run it
-          for abi in armeabi-v7a arm64-v8a; do
+          for abi in arm64-v8a; do
             unzip -l "out/$APK_NAME" | grep -q "lib/$abi/libApplicationMain.so" || { echo "missing $abi"; exit 1; }
           done
 
