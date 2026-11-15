@@ -74,13 +74,13 @@ class ClientPrefs { //default settings if it can't find a save file containing y
 	public static var botTxtFade:Bool = true;
 	public static var pauseMusic:String = 'Tea Time';
 	public static var daMenuMusic:String = 'Default';
-	public static var checkForUpdates:Bool = true;
+	public static var checkForUpdates:Bool = #if mobile false #else true #end; // no network check on startup on phones
 	public static var comboStacking = true;
-	public static var showRamUsage:Bool = true;
-	public static var showMaxRamUsage:Bool = true;
+	public static var showRamUsage:Bool = #if mobile false #else true #end;
+	public static var showMaxRamUsage:Bool = #if mobile false #else true #end;
 	public static var debugInfo:Bool = false;
-	public static var tipTexts:Bool = true;
-	public static var discordRPC:Bool = true;
+	public static var tipTexts:Bool = #if mobile false #else true #end;
+	public static var discordRPC:Bool = #if mobile false #else true #end; // Discord RPC is desktop-only
 	public static var peOGCrash:Bool = false;
 
 	//Graphics
