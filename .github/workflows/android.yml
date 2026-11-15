@@ -194,6 +194,28 @@ jobs:
           path: build.log
           if-no-files-found: ignore
 
+      # liblime.so needs libc++_shared.so, but the APK did not include it, so the game died at start with
+      # "dlopen failed: library libc++_shared.so not found". Add it from the NDK, re-align and re-sign the APK.
+      - name: Add libc++_shared.so to the APK
+        run: |
+          NDK="${{ steps.ndk.outputs.ndk-path }}"
+          SYS="$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib"
+          APK=$(find build/release/android -name "*.apk" -path "*release*" | head -n 1)
+          test -n "$APK"
+          APK_ABS=$(realpath "$APK")
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
+          W=$(mktemp -d)
+          mkdir -p "$W/lib/arm64-v8a" "$W/lib/armeabi-v7a"
+          cp "$SYS/aarch64-linux-android/libc++_shared.so" "$W/lib/arm64-v8a/"
+          cp "$SYS/arm-linux-androideabi/libc++_shared.so" "$W/lib/armeabi-v7a/"
+          zip -d "$APK_ABS" 'META-INF/*' || true
+          (cd "$W" && zip -0 -r "$APK_ABS" lib)
+          "$BT/zipalign" -f -p 4 "$APK_ABS" "$W/aligned.apk"
+          "$BT/apksigner" sign --ks "$KEYSTORE" --ks-pass "pass:$PASS" \
+            --ks-key-alias "$ALIAS" --key-pass "pass:$PASS" "$W/aligned.apk"
+          mv "$W/aligned.apk" "$APK_ABS"
+          unzip -l "$APK_ABS" | grep "libc++_shared"
+
       - name: Find the APK
         run: |
           APK=$(find build/release/android -name "*.apk" -path "*release*" | head -n 1)
