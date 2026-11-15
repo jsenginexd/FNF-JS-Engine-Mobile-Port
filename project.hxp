@@ -327,20 +327,20 @@ class Project extends HXProject
 		// Should be true unless explicitly requested.
 		MODS_ALLOWED.apply(this, (isDesktop() || isMobile()));
 		LUA_ALLOWED.apply(this, (isDesktop() || isMobile()));
-		VIDEOS_ALLOWED.apply(this, (isDesktop() || isMobile()));
+		VIDEOS_ALLOWED.apply(this, isDesktop());
 		CRASH_HANDLER.apply(this, true);
 		ACHIEVEMENTS_ALLOWED.apply(this, true);
-		CHECK_FOR_UPDATES.apply(this, true);
+		CHECK_FOR_UPDATES.apply(this, !isMobile());
 		HSCRIPT_ALLOWED.apply(this, (isDesktop() || isMobile()));
 		DISCORD_ALLOWED.apply(this, isDesktop());
-		SHADERS_ALLOWED.apply(this, true);
+		SHADERS_ALLOWED.apply(this, !isMobile());
 		FUNNY_ALLOWED.apply(this, true);
 		// TITLE_SCREEN_EASTER_EGG.apply(this, true);
 
 		// Should be true only on web builds.
 		// Enabling embedding and preloading is required to preload assets properly.
 		// EMBED_ASSETS.apply(this, isWeb());
-		PRELOAD_ALL.apply(this, true);
+		PRELOAD_ALL.apply(this, !isMobile());
 
 		// Should be true except on MacOS.
 		// File drop doesn't work there.
