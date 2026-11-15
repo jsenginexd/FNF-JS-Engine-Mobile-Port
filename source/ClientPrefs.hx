@@ -344,6 +344,21 @@ class ClientPrefs { //default settings if it can't find a save file containing y
 			FlxG.save.data.perfectWindowFixed = true;
 			FlxG.save.flush();
 		}
+		// one-time "max speed" preset for phones (Max Notes is left as the player has it): fewer script calls and effects
+		if (FlxG.save.data.mobileSpeedPresetV1 != true)
+		{
+			noSpawnFunc = noHitFuncs = noSkipFuncs = lessBotLag = true;
+			noteSplashes = oppNoteSplashes = false;
+			lowQuality = true;
+			shaders = false;
+			globalAntialiasing = false;
+			framerate = 120;
+			FlxG.updateFramerate = FlxG.drawFramerate = 120;
+			for (f in ["noSpawnFunc", "noHitFuncs", "noSkipFuncs", "lessBotLag", "noteSplashes", "oppNoteSplashes", "lowQuality", "shaders", "globalAntialiasing", "framerate"])
+				Reflect.setField(FlxG.save.data, f, Reflect.field(ClientPrefs, f));
+			FlxG.save.data.mobileSpeedPresetV1 = true;
+			FlxG.save.flush();
+		}
 		// the touch hitbox is read through Controls like a gamepad, never through keyboard events
 		controllerMode = true;
 		#end
