@@ -3405,10 +3405,10 @@ class PlayState extends MusicBeatState
 				sortFrame++;
 				final doSort:Bool = sortFrame % 4 == 0;
 				if (notes.length > 1 && (notes.length <= 400 || doSort))
-					notes.sort(FlxSort.byY, ClientPrefs.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING);
+					notes.sort(sortByLaneThenY, ClientPrefs.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING);
 				sustainNotes.forEach(updateNote);
 				if (sustainNotes.length > 1 && (sustainNotes.length <= 400 || doSort))
-					sustainNotes.sort(FlxSort.byY, ClientPrefs.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING);
+					sustainNotes.sort(sortByLaneThenY, ClientPrefs.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING);
 				profUpdate = (profT2 - profT1) * 1000;
 				profSort = (haxe.Timer.stamp() - profT2) * 1000 - 0;
 			}
@@ -3471,7 +3471,7 @@ class PlayState extends MusicBeatState
 
 		if (ClientPrefs.showRendered)
 		{
-			if (!ffmpegMode) renderedTxt.text = 'Rendered/Skipped: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(skippedCount)}/${formatNumber(maxRenderedNotes)}/${formatNumber(maxSkipped)}\nspawn ${Math.round(profSpawn * 10) / 10}ms | notes ${Math.round(profUpdate * 10) / 10}ms | sort+sus ${Math.round(profSort * 10) / 10}ms';
+			if (!ffmpegMode) renderedTxt.text = 'Rendered/Skipped: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(skippedCount)}/${formatNumber(maxRenderedNotes)}/${formatNumber(maxSkipped)}\nspawn ${Math.round(profSpawn * 10) / 10}ms | notes ${Math.round(profUpdate * 10) / 10}ms | sort+sus ${Math.round(profSort * 10) / 10}ms | draw ${Math.round(profDraw * 10) / 10}ms';
 			else renderedTxt.text = 'Rendered Notes: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(maxRenderedNotes)}/${formatNumber(notes.members.length + sustainNotes.members.length)}';
 		}
 
@@ -5106,26 +5106,48 @@ class PlayState extends MusicBeatState
 	var NOTE_SPAWN_TIME:Float = 0;
 	var targetNote:PreloadedChartNote = null;
 	var spawnedNote:Note;
+	var profDraw:Float = 0;
 	var profSpawn:Float = 0;
 	var profUpdate:Float = 0;
 	var profSort:Float = 0;
 	var sortFrame:Int = 0;
+	override function draw():Void
+	{
+		final t:Float = haxe.Timer.stamp();
+		super.draw();
+		profDraw = (haxe.Timer.stamp() - t) * 1000;
+	}
+
+	// Draw notes lane by lane (then by Y). Every lane uses its own colour shader and OpenFL starts a new draw batch each
+	// time the shader changes, so sorting by Y alone alternated shaders on almost every note (one draw call per note).
+	static function sortByLaneThenY(order:Int, a:Note, b:Note):Int
+	{
+		final la:Int = a.noteData + (a.mustPress ? 8 : 0);
+		final lb:Int = b.noteData + (b.mustPress ? 8 : 0);
+		if (la != lb) return la < lb ? -1 : 1;
+		return FlxSort.byValues(order, a.y, b.y);
+	}
+
 	var batchSkips:Bool = false;
 	var batchChar:Array<Character> = [null, null];
-	var batchAnim:Array<String> = [null, null];
+	var batchIdx:Array<Int> = [0, 0];
+	var batchSfx:Array<String> = [null, null];
+	var batchNpsGood:Float = 0;
+	var batchNpsOpp:Float = 0;
 
-	function queueSkipAnim(slot:Int, char:Character, anim:String):Void
+	function queueSkipAnim(slot:Int, char:Character, idx:Int, suffix:String):Void
 	{
 		if (batchChar[slot] != null && batchChar[slot] != char) flushSkipAnim(slot);
 		batchChar[slot] = char;
-		batchAnim[slot] = anim;
+		batchIdx[slot] = idx;
+		batchSfx[slot] = suffix;
 	}
 
 	function flushSkipAnim(slot:Int):Void
 	{
 		if (batchChar[slot] != null)
 		{
-			batchChar[slot].playAnim(batchAnim[slot], true);
+			batchChar[slot].playAnim(singAnimations[batchIdx[slot]] + batchSfx[slot], true);
 			batchChar[slot].holdTimer = 0;
 			batchChar[slot] = null;
 		}
@@ -5155,6 +5177,20 @@ class PlayState extends MusicBeatState
 				batchSkips = false;
 				flushSkipAnim(0);
 				flushSkipAnim(1);
+				if (batchNpsGood > 0)
+				{
+					notesHitArray.push(batchNpsGood);
+					npsSum += batchNpsGood;
+					notesHitDateArray.push(Conductor.songPosition);
+					batchNpsGood = 0;
+				}
+				if (batchNpsOpp > 0)
+				{
+					oppNotesHitArray.push(batchNpsOpp);
+					oppNpsSum += batchNpsOpp;
+					oppNotesHitDateArray.push(Conductor.songPosition);
+					batchNpsOpp = 0;
+				}
 			}
 			if (ClientPrefs.showNotes || !ClientPrefs.showNotes && !cpuControlled)
 			{
@@ -5412,7 +5448,7 @@ class PlayState extends MusicBeatState
 				playerChar = !noteAlt.gfNote ? oppTrigger ? dad : boyfriend : gf;
 				if (playerChar != null)
 				{
-					if (batchSkips) queueSkipAnim(1, playerChar, singAnimations[(noteAlt.noteData)] + noteAlt.animSuffix);
+					if (batchSkips) queueSkipAnim(1, playerChar, noteAlt.noteData, noteAlt.animSuffix);
 					else
 					{
 						playerChar.playAnim(singAnimations[(noteAlt.noteData)] + noteAlt.animSuffix, true);
@@ -5433,10 +5469,13 @@ class PlayState extends MusicBeatState
 				combo += 1 * (opponentChart ? polyphonyOppo : polyphonyBF);
 				songScore += (ClientPrefs.noMarvJudge ? 350 : 500) * (opponentChart ? polyphonyOppo : polyphonyBF);
 				totalNotesPlayed += 1 * (opponentChart ? polyphonyOppo : polyphonyBF);
-				if (ClientPrefs.showNPS) { //i dont think we should be pushing to 2 arrays at the same time but oh well
-					notesHitArray.push(1 * (opponentChart ? polyphonyOppo : polyphonyBF));
-					npsSum += 1 * (opponentChart ? polyphonyOppo : polyphonyBF);
-					notesHitDateArray.push(Conductor.songPosition);
+				if (ClientPrefs.showNPS) {
+					if (batchSkips) batchNpsGood += 1 * (opponentChart ? polyphonyOppo : polyphonyBF); // added as ONE entry after the skip loop
+					else {
+						notesHitArray.push(1 * (opponentChart ? polyphonyOppo : polyphonyBF));
+						npsSum += 1 * (opponentChart ? polyphonyOppo : polyphonyBF);
+						notesHitDateArray.push(Conductor.songPosition);
+					}
 				}
 				if ((opponentChart ? polyphonyOppo : polyphonyBF) > 1) totalNotes += (opponentChart ? polyphonyOppo : polyphonyBF) - 1;
 			}
@@ -5582,13 +5621,12 @@ class PlayState extends MusicBeatState
 			}
 			if(!noteAlt.noAnimation && ClientPrefs.charsAndBG) {
 				oppChar = !noteAlt.gfNote ? !opponentChart ? dad : boyfriend : gf;
-				animToPlay = singAnimations[Std.int(Math.abs(noteAlt.noteData))] + noteAlt.animSuffix;
 				if (oppChar != null)
 				{
-					if (batchSkips) queueSkipAnim(0, oppChar, animToPlay);
+					if (batchSkips) queueSkipAnim(0, oppChar, Std.int(Math.abs(noteAlt.noteData)), noteAlt.animSuffix);
 					else
 					{
-						oppChar.playAnim(animToPlay, true);
+						oppChar.playAnim(singAnimations[Std.int(Math.abs(noteAlt.noteData))] + noteAlt.animSuffix, true);
 						oppChar.holdTimer = 0;
 					}
 				}
@@ -5601,10 +5639,13 @@ class PlayState extends MusicBeatState
 			}
 			if (!noteAlt.isSustainNote)
 			{
-				if (ClientPrefs.showNPS) { //i dont think we should be pushing to 2 arrays at the same time but oh well
-					oppNotesHitArray.push(1 * polyphonyOppo);
-					oppNpsSum += 1 * polyphonyOppo;
-					oppNotesHitDateArray.push(Conductor.songPosition);
+				if (ClientPrefs.showNPS) {
+					if (batchSkips) batchNpsOpp += 1 * polyphonyOppo; // added as ONE entry after the skip loop
+					else {
+						oppNotesHitArray.push(1 * polyphonyOppo);
+						oppNpsSum += 1 * polyphonyOppo;
+						oppNotesHitDateArray.push(Conductor.songPosition);
+					}
 				}
 				enemyHits += 1 * polyphonyOppo;
 
