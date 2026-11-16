@@ -3182,7 +3182,7 @@ class PlayState extends MusicBeatState
 		if (scoreTxtUpdateFrame > 0) scoreTxtUpdateFrame = 0;
 		if (popUpsFrame > 0) popUpsFrame = 0;
 		if (missRecalcsPerFrame > 0) missRecalcsPerFrame = 0;
-		strumsHit = [false, false, false, false, false, false, false, false];
+		for (i in 0...strumsHit.length) strumsHit[i] = false;
 		for (i in 0...splashesPerFrame.length)
 			if (splashesPerFrame[i] > 0) splashesPerFrame[i] = 0;
 
