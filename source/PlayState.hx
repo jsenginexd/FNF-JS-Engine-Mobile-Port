@@ -5097,6 +5097,27 @@ class PlayState extends MusicBeatState
 	var NOTE_SPAWN_TIME:Float = 0;
 	var targetNote:PreloadedChartNote = null;
 	var spawnedNote:Note;
+	var batchSkips:Bool = false;
+	var batchChar:Array<Character> = [null, null];
+	var batchAnim:Array<String> = [null, null];
+
+	function queueSkipAnim(slot:Int, char:Character, anim:String):Void
+	{
+		if (batchChar[slot] != null && batchChar[slot] != char) flushSkipAnim(slot);
+		batchChar[slot] = char;
+		batchAnim[slot] = anim;
+	}
+
+	function flushSkipAnim(slot:Int):Void
+	{
+		if (batchChar[slot] != null)
+		{
+			batchChar[slot].playAnim(batchAnim[slot], true);
+			batchChar[slot].holdTimer = 0;
+			batchChar[slot] = null;
+		}
+	}
+
 	function spawnNotes()
 	{
 		if (unspawnNotes[notesAddedCount] != null)
@@ -5108,6 +5129,7 @@ class PlayState extends MusicBeatState
 
 			if (targetNote != null && !targetNote.wasHit)
 			{
+				batchSkips = true; // when thousands of notes are skipped in one frame only the last sing animation per side is shown
 				while (targetNote.strumTime <= Conductor.songPosition - ClientPrefs.noteOffset) {
 					targetNote.wasHit = true;
 					targetNote.mustPress ? goodNoteHit(null, targetNote) : opponentNoteHit(null, targetNote);
@@ -5117,6 +5139,9 @@ class PlayState extends MusicBeatState
 					skippedCount++;
 					if (skippedCount > maxSkipped) maxSkipped = skippedCount;
 				}
+				batchSkips = false;
+				flushSkipAnim(0);
+				flushSkipAnim(1);
 			}
 			if (ClientPrefs.showNotes || !ClientPrefs.showNotes && !cpuControlled)
 			{
@@ -5374,8 +5399,12 @@ class PlayState extends MusicBeatState
 				playerChar = !noteAlt.gfNote ? oppTrigger ? dad : boyfriend : gf;
 				if (playerChar != null)
 				{
-					playerChar.playAnim(singAnimations[(noteAlt.noteData)] + noteAlt.animSuffix, true);
-					playerChar.holdTimer = 0;
+					if (batchSkips) queueSkipAnim(1, playerChar, singAnimations[(noteAlt.noteData)] + noteAlt.animSuffix);
+					else
+					{
+						playerChar.playAnim(singAnimations[(noteAlt.noteData)] + noteAlt.animSuffix, true);
+						playerChar.holdTimer = 0;
+					}
 				}
 			}
 			if(cpuControlled && !ClientPrefs.showNotes) {
@@ -5543,8 +5572,12 @@ class PlayState extends MusicBeatState
 				animToPlay = singAnimations[Std.int(Math.abs(noteAlt.noteData))] + noteAlt.animSuffix;
 				if (oppChar != null)
 				{
-					oppChar.playAnim(animToPlay, true);
-					oppChar.holdTimer = 0;
+					if (batchSkips) queueSkipAnim(0, oppChar, animToPlay);
+					else
+					{
+						oppChar.playAnim(animToPlay, true);
+						oppChar.holdTimer = 0;
+					}
 				}
 			}
 			if (ClientPrefs.opponentLightStrum && !strumsHit[noteAlt.noteData % 4] && !ClientPrefs.showNotes)
