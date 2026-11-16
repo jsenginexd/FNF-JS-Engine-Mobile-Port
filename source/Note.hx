@@ -472,7 +472,9 @@ class Note extends FlxSprite
 				scale.y *= PlayState.daPixelZoom * 1.20;
 				scale.x *= PlayState.daPixelZoom;
 			}
-			updateHitbox();
+			// copyScaleX refreshes the hitbox after applying the receptor scale below.
+			// Avoid doing the same hitbox work twice for every sustain note each frame.
+			if (!copyScaleX) updateHitbox();
 		}
 
 		distance = (0.45 * (Conductor.songPosition - strumTime) * songSpeed * multSpeed);
