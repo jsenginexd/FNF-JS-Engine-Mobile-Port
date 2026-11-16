@@ -4781,36 +4781,64 @@ class PlayState extends MusicBeatState
 
 		var canMiss:Bool = !ClientPrefs.ghostTapping;
 
-		// obtain notes that the player can hit
-		var plrInputNotes:Array<Note> = notes.members.filter(function(n:Note):Bool {
-			var canHit:Bool = !usingBotEnergy && !strumsBlocked[n.noteData] && n.canBeHit && n.mustPress && !n.tooLate && !n.wasGoodHit && !n.blockHit;
-			// trace('[keyPressed] Note? ${n != null}, noteData=${n.noteData}, strumTime=${n.strumTime}, canHit=$canHit, mustPress=${n.mustPress}, tooLate=${n.tooLate}, wasGoodHit=${n.wasGoodHit}, Conductor=${Conductor.songPosition}');
-			return n != null && n.exists && canHit && !n.isSustainNote && n.noteData == key;
-		});
-		plrInputNotes.sort(sortHitNotes);
+		// Find the first two hittable notes in sorted order without allocating and
+		// sorting a full array for every key press. Dense charts can have thousands of notes.
+		var firstNote:Note = null;
+		var secondNote:Note = null;
+		var hitCount:Int = 0;
+		for (candidate in notes.members)
+		{
+			if (candidate == null || !candidate.exists || usingBotEnergy || strumsBlocked[candidate.noteData] ||
+				!candidate.canBeHit || !candidate.mustPress || candidate.tooLate || candidate.wasGoodHit ||
+				candidate.blockHit || candidate.isSustainNote || candidate.noteData != key) continue;
 
-		if (plrInputNotes.length != 0) {
-			var funnyNote:Note = plrInputNotes[0]; // front note
+			hitCount++;
+			if (firstNote == null || (firstNote.lowPriority && !candidate.lowPriority) ||
+				(firstNote.lowPriority == candidate.lowPriority && candidate.strumTime < firstNote.strumTime))
+			{
+				secondNote = firstNote;
+				firstNote = candidate;
+			}
+			else if (secondNote == null || (secondNote.lowPriority && !candidate.lowPriority) ||
+				(secondNote.lowPriority == candidate.lowPriority && candidate.strumTime < secondNote.strumTime))
+			{
+				secondNote = candidate;
+			}
+		}
 
-			if (plrInputNotes.length > 1) {
-				var doubleNote:Note = plrInputNotes[1];
+		if (firstNote != null)
+		{
+			var funnyNote:Note = firstNote; // front note
 
+			if (secondNote != null)
+			{
+				var doubleNote:Note = secondNote;
 				//if the note has the same notedata and doOppStuff indicator as funnynote, then do the check
-				if (doubleNote.noteData == funnyNote.noteData && doubleNote.doOppStuff == funnyNote.doOppStuff) {
+				if (doubleNote.noteData == funnyNote.noteData && doubleNote.doOppStuff == funnyNote.doOppStuff)
+				{
 					// if the note has a 0ms distance (is on top of the current note), kill it
 					if (Math.abs(doubleNote.strumTime - funnyNote.strumTime) < 1.0)
 						invalidateNote(doubleNote);
 					else if (doubleNote.strumTime < funnyNote.strumTime)
-					{
-						// replace the note if its ahead of time (or at least ensure "doubleNote" is ahead)
 						funnyNote = doubleNote;
-					}
 				}
 				else goodNoteHit(doubleNote); //otherwise, hit doubleNote instead of killing it
 			}
 			goodNoteHit(funnyNote);
-			if (plrInputNotes.length > 2 && ClientPrefs.ezSpam) {
-				for (i in 1...plrInputNotes.length) goodNoteHit(plrInputNotes[i]);
+
+			// Preserve ezSpam's full sorted hit list only when it is actually needed.
+			if (hitCount > 2 && ClientPrefs.ezSpam)
+			{
+				var spamNotes:Array<Note> = [];
+				for (candidate in notes.members)
+				{
+					if (candidate != null && candidate.exists && !usingBotEnergy && !strumsBlocked[candidate.noteData] &&
+						candidate.canBeHit && candidate.mustPress && !candidate.tooLate && !candidate.wasGoodHit &&
+						!candidate.blockHit && !candidate.isSustainNote && candidate.noteData == key)
+						spamNotes.push(candidate);
+				}
+				spamNotes.sort(sortHitNotes);
+				for (i in 1...spamNotes.length) goodNoteHit(spamNotes[i]);
 			}
 		}
 		else {
