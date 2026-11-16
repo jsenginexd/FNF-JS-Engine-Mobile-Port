@@ -158,6 +158,28 @@ class Note extends FlxSprite
 	public var hitCausesMiss:Bool = false;
 	public var distance:Float = 2000; //plan on doing scroll directions soon -bb
 
+	// Sustain notes keep the same hitbox dimensions for many frames. Avoid rebuilding
+	// the Flixel hitbox unless the scale or current animation frame actually changes.
+	private var hitboxCacheValid:Bool = false;
+	private var hitboxScaleX:Float = 0;
+	private var hitboxScaleY:Float = 0;
+	private var hitboxFrameWidth:Float = 0;
+	private var hitboxFrameHeight:Float = 0;
+
+	private inline function updateHitboxIfNeeded():Void
+	{
+		if (!hitboxCacheValid || hitboxScaleX != scale.x || hitboxScaleY != scale.y ||
+			hitboxFrameWidth != frameWidth || hitboxFrameHeight != frameHeight)
+		{
+			updateHitbox();
+			hitboxScaleX = scale.x;
+			hitboxScaleY = scale.y;
+			hitboxFrameWidth = frameWidth;
+			hitboxFrameHeight = frameHeight;
+			hitboxCacheValid = true;
+		}
+	}
+
 	public var hitsoundDisabled:Bool = false;
 
 	public var pixelNote:Bool = false;
@@ -474,7 +496,7 @@ class Note extends FlxSprite
 			}
 			// copyScaleX refreshes the hitbox after applying the receptor scale below.
 			// Avoid doing the same hitbox work twice for every sustain note each frame.
-			if (!copyScaleX) updateHitbox();
+			if (!copyScaleX) updateHitboxIfNeeded();
 		}
 
 		distance = (0.45 * (Conductor.songPosition - strumTime) * songSpeed * multSpeed);
@@ -509,7 +531,7 @@ class Note extends FlxSprite
 		if(copyScaleX)
 		{
 			scale.x = strum.scale.x;
-			if (isSustainNote) updateHitbox();
+			if (isSustainNote) updateHitboxIfNeeded();
 		}
 		if(copyScaleY && !isSustainNote)
 		{
