@@ -3384,9 +3384,10 @@ class PlayState extends MusicBeatState
 
 		skippedCount = 0;
 
-		final profT0:Float = haxe.Timer.stamp();
+		final profileNotes:Bool = ClientPrefs.showRendered;
+		final profT0:Float = profileNotes ? haxe.Timer.stamp() : 0;
 		spawnNotes();
-		profSpawn = (haxe.Timer.stamp() - profT0) * 1000;
+		if (profileNotes) profSpawn = (haxe.Timer.stamp() - profT0) * 1000;
 
 		if (generatedMusic)
 		{
@@ -3398,19 +3399,23 @@ class PlayState extends MusicBeatState
 				else if (ClientPrefs.charsAndBG) playerDance();
 
 				amountOfRenderedNotes = 0;
-				final profT1:Float = haxe.Timer.stamp();
+				final profT1:Float = profileNotes ? haxe.Timer.stamp() : 0;
 				notes.forEach(updateNote);
-				final profT2:Float = haxe.Timer.stamp();
-				// sorting thousands of notes by Y every frame is very slow; with that many notes the draw order is not visible, so sort every 4th frame
+				final profT2:Float = profileNotes ? haxe.Timer.stamp() : 0;
+				// Lane order is stable; refresh vertical ordering every 4 frames for every chart size.
+				// Sorting small groups every single frame wasted CPU without improving lane batching.
 				sortFrame++;
 				final doSort:Bool = sortFrame % 4 == 0;
-				if (notes.length > 1 && (notes.length <= 400 || doSort))
+				if (notes.length > 1 && doSort)
 					notes.sort(sortByLaneThenY, ClientPrefs.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING);
 				sustainNotes.forEach(updateNote);
-				if (sustainNotes.length > 1 && (sustainNotes.length <= 400 || doSort))
+				if (sustainNotes.length > 1 && doSort)
 					sustainNotes.sort(sortByLaneThenY, ClientPrefs.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING);
-				profUpdate = (profT2 - profT1) * 1000;
-				profSort = (haxe.Timer.stamp() - profT2) * 1000 - 0;
+				if (profileNotes)
+				{
+					profUpdate = (profT2 - profT1) * 1000;
+					profSort = (haxe.Timer.stamp() - profT2) * 1000;
+				}
 			}
 
 			destroyNotes();
@@ -5113,9 +5118,13 @@ class PlayState extends MusicBeatState
 	var sortFrame:Int = 0;
 	override function draw():Void
 	{
-		final t:Float = haxe.Timer.stamp();
-		super.draw();
-		profDraw = (haxe.Timer.stamp() - t) * 1000;
+		if (ClientPrefs.showRendered)
+		{
+			final t:Float = haxe.Timer.stamp();
+			super.draw();
+			profDraw = (haxe.Timer.stamp() - t) * 1000;
+		}
+		else super.draw();
 	}
 
 	// Draw notes lane by lane (then by Y). Every lane uses its own colour shader and OpenFL starts a new draw batch each
