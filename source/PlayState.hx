@@ -3516,43 +3516,48 @@ class PlayState extends MusicBeatState
 	{
 		switch (ClientPrefs.iconBounceType) {
 			case 'Old Psych':
-				for (i in [iconP1, iconP2])
-					i.setGraphicSize(Std.int(FlxMath.lerp(i.frameWidth, i.width, CoolUtil.boundTo(1 - (elapsed * 30 * playbackRate), 0, 1))),
-					Std.int(FlxMath.lerp(i.frameHeight, i.height, CoolUtil.boundTo(1 - (elapsed * 30 * playbackRate), 0, 1))));
+				final lerpAmount:Float = CoolUtil.boundTo(1 - (elapsed * 30 * playbackRate), 0, 1);
+				iconP1.setGraphicSize(Std.int(FlxMath.lerp(iconP1.frameWidth, iconP1.width, lerpAmount)),
+					Std.int(FlxMath.lerp(iconP1.frameHeight, iconP1.height, lerpAmount)));
+				iconP2.setGraphicSize(Std.int(FlxMath.lerp(iconP2.frameWidth, iconP2.width, lerpAmount)),
+					Std.int(FlxMath.lerp(iconP2.frameHeight, iconP2.height, lerpAmount)));
 
 			case 'Strident Crisis':
 				iconSizeResetTime = Math.max(0, iconSizeResetTime - elapsed);
-				var iconLerp = FlxEase.quartIn(iconSizeResetTime / 0.5);
-
-				for (i in [iconP1, iconP2])
-					i.setGraphicSize(Std.int(FlxMath.lerp(i.frameWidth, i.width, iconLerp)),
-					Std.int(FlxMath.lerp(i.frameHeight, i.height, iconLerp)));
+				final iconLerp:Float = FlxEase.quartIn(iconSizeResetTime / 0.5);
+				iconP1.setGraphicSize(Std.int(FlxMath.lerp(iconP1.frameWidth, iconP1.width, iconLerp)),
+					Std.int(FlxMath.lerp(iconP1.frameHeight, iconP1.height, iconLerp)));
+				iconP2.setGraphicSize(Std.int(FlxMath.lerp(iconP2.frameWidth, iconP2.width, iconLerp)),
+					Std.int(FlxMath.lerp(iconP2.frameHeight, iconP2.height, iconLerp)));
 
 			case 'Dave and Bambi':
 				iconSizeResetTime = Math.max(0, iconSizeResetTime - elapsed / playbackRate);
-				var iconLerp = FlxEase.quartIn(iconSizeResetTime / 0.8);
-
-				for (i in [iconP1, iconP2])
-					i.setGraphicSize(Std.int(FlxMath.lerp(i.frameWidth, i.width, iconLerp)),
-					Std.int(FlxMath.lerp(i.frameHeight, i.height, iconLerp)));
+				final iconLerp:Float = FlxEase.quartIn(iconSizeResetTime / 0.8);
+				iconP1.setGraphicSize(Std.int(FlxMath.lerp(iconP1.frameWidth, iconP1.width, iconLerp)),
+					Std.int(FlxMath.lerp(iconP1.frameHeight, iconP1.height, iconLerp)));
+				iconP2.setGraphicSize(Std.int(FlxMath.lerp(iconP2.frameWidth, iconP2.width, iconLerp)),
+					Std.int(FlxMath.lerp(iconP2.frameHeight, iconP2.height, iconLerp)));
 
 			case 'Plank Engine':
 				final funnyBeat = (Conductor.songPosition / 1000) * (Conductor.bpm / 60);
-
-				for (i in [iconP1, iconP2])
-					i.offset.y = Math.abs(Math.sin(funnyBeat * Math.PI))  * 16 - 4;
+				final iconOffset:Float = Math.abs(Math.sin(funnyBeat * Math.PI)) * 16 - 4;
+				iconP1.offset.y = iconOffset;
+				iconP2.offset.y = iconOffset;
 
 			case 'New Psych', 'VS Steve':
-				for (i in [iconP1, iconP2]) {
-					final mult:Float = FlxMath.lerp(1, i.scale.x, CoolUtil.boundTo(1 - (elapsed * 9 * playbackRate), 0, 1));
-					i.scale.set(mult, mult);
-				}
+				final lerpAmount:Float = CoolUtil.boundTo(1 - (elapsed * 9 * playbackRate), 0, 1);
+				final multP1:Float = FlxMath.lerp(1, iconP1.scale.x, lerpAmount);
+				final multP2:Float = FlxMath.lerp(1, iconP2.scale.x, lerpAmount);
+				iconP1.scale.set(multP1, multP1);
+				iconP2.scale.set(multP2, multP2);
 		}
 
-		for (i in [iconP1, iconP2]) {
-			if (ClientPrefs.iconBounceType == 'Golden Apple') i.centerOffsets();
-			i.updateHitbox();
+		if (ClientPrefs.iconBounceType == 'Golden Apple') {
+			iconP1.centerOffsets();
+			iconP2.centerOffsets();
 		}
+		iconP1.updateHitbox();
+		iconP2.updateHitbox();
 	}
 
 	var percent:Float = 0;
