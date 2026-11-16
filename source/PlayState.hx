@@ -2178,6 +2178,8 @@ class PlayState extends MusicBeatState
 				var daNote:Note = group.members[i];
 				if(daNote.strumTime - 350 < time)
 				{
+					// Keep the live-note counter in sync without recounting both groups.
+					if (daNote.exists && daNote.alive && !daNote.inKillQueue && limitNC > 0) limitNC--;
 					daNote.active = false;
 					daNote.visible = false;
 					daNote.ignoreNote = true;
@@ -4548,6 +4550,8 @@ class PlayState extends MusicBeatState
 	}
 
 	public function KillNotes() {
+		// All currently spawned notes are removed below.
+		limitNC = 0;
 		for (group in [notes, sustainNotes]){
 			if (group != null){
 				while (group.length > 0) {
@@ -5259,10 +5263,8 @@ class PlayState extends MusicBeatState
 			}
 			if (ClientPrefs.showNotes || !ClientPrefs.showNotes && !cpuControlled)
 			{
-				// Counting living notes walks both groups. Do it only once a note enters
-				// the spawn window, not on every frame while the next note is far away.
-				if (targetNote.strumTime - Conductor.songPosition < (NOTE_SPAWN_TIME / targetNote.multSpeed))
-					limitNC = notes.countLiving() + sustainNotes.countLiving();
+				// limitNC is maintained as notes are spawned and destroyed. Avoid
+				// countLiving() here: it scans every active note on every spawn-window frame.
 				while (limitNC < noteLimit && targetNote.strumTime - Conductor.songPosition < (NOTE_SPAWN_TIME / targetNote.multSpeed)) {
 					spawnedNote = (targetNote.isSustainNote ? sustainNotes : notes).recycle(Note);
 					spawnedNote.setupNoteData(targetNote);
@@ -5757,6 +5759,7 @@ class PlayState extends MusicBeatState
 		{
 			noteKill = iterator.next();
 			noteKill.inKillQueue = false;
+			if (noteKill.exists && noteKill.alive && limitNC > 0) limitNC--;
 			noteKill.kill();
 		}
 		killNotes = [];
