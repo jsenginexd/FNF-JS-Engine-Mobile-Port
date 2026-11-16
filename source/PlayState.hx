@@ -5146,12 +5146,24 @@ class PlayState extends MusicBeatState
 	static function insertionSortNotes(group:FlxTypedGroup<Note>, order:Int):Void
 	{
 		final members = group.members;
-		final fallbackLimit:Int = members.length >> 1;
+		final length:Int = members.length;
+		if (length < 2) return;
+
+		final fallbackLimit:Int = length >> 1;
 		var moves:Int = 0;
 		var i:Int = 1;
-		while (i < members.length)
+		while (i < length)
 		{
 			final current:Note = members[i];
+
+			// Most frames have no crossing notes. Check the adjacent pair first and
+			// avoid the writes and inner-loop setup when this item is already placed.
+			if (!noteComesAfter(members[i - 1], current, order))
+			{
+				i++;
+				continue;
+			}
+
 			var j:Int = i - 1;
 			while (j >= 0 && noteComesAfter(members[j], current, order))
 			{
