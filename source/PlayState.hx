@@ -3550,14 +3550,14 @@ class PlayState extends MusicBeatState
 				final multP2:Float = FlxMath.lerp(1, iconP2.scale.x, newPsychLerpAmount);
 				iconP1.scale.set(multP1, multP1);
 				iconP2.scale.set(multP2, multP2);
+				iconP1.updateHitbox();
+				iconP2.updateHitbox();
 		}
 
 		if (ClientPrefs.iconBounceType == 'Golden Apple') {
 			iconP1.centerOffsets();
 			iconP2.centerOffsets();
 		}
-		iconP1.updateHitbox();
-		iconP2.updateHitbox();
 	}
 
 	var percent:Float = 0;
