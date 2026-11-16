@@ -67,35 +67,56 @@ class Conductor
 		return lastChange.stepCrochet*4;
 	}
 
-	public static function getBPMFromSeconds(time:Float){
+	public static function getBPMFromSeconds(time:Float):BPMChangeEvent
+	{
 		var lastChange:BPMChangeEvent = {
 			stepTime: 0,
 			songTime: 0,
 			bpm: bpm,
 			stepCrochet: stepCrochet
-		}
-		for (i in 0...Conductor.bpmChangeMap.length)
-		{
-			if (time >= Conductor.bpmChangeMap[i].songTime)
-				lastChange = Conductor.bpmChangeMap[i];
-		}
+		};
 
+		// BPM changes are appended in song-time order. Find the last change at
+		// or before this timestamp without scanning the entire map each lookup.
+		var low:Int = 0;
+		var high:Int = bpmChangeMap.length - 1;
+		while (low <= high)
+		{
+			final mid:Int = low + ((high - low) >> 1);
+			final change:BPMChangeEvent = bpmChangeMap[mid];
+			if (change.songTime <= time)
+			{
+				lastChange = change;
+				low = mid + 1;
+			}
+			else high = mid - 1;
+		}
 		return lastChange;
 	}
 
-	public static function getBPMFromStep(step:Float){
+	public static function getBPMFromStep(step:Float):BPMChangeEvent
+	{
 		var lastChange:BPMChangeEvent = {
 			stepTime: 0,
 			songTime: 0,
 			bpm: bpm,
 			stepCrochet: stepCrochet
-		}
-		for (i in 0...Conductor.bpmChangeMap.length)
-		{
-			if (Conductor.bpmChangeMap[i].stepTime<=step)
-				lastChange = Conductor.bpmChangeMap[i];
-		}
+		};
 
+		// The step map uses the same chronological ordering as the time map.
+		var low:Int = 0;
+		var high:Int = bpmChangeMap.length - 1;
+		while (low <= high)
+		{
+			final mid:Int = low + ((high - low) >> 1);
+			final change:BPMChangeEvent = bpmChangeMap[mid];
+			if (change.stepTime <= step)
+			{
+				lastChange = change;
+				low = mid + 1;
+			}
+			else high = mid - 1;
+		}
 		return lastChange;
 	}
 
