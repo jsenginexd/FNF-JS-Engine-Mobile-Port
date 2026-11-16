@@ -3516,11 +3516,11 @@ class PlayState extends MusicBeatState
 	{
 		switch (ClientPrefs.iconBounceType) {
 			case 'Old Psych':
-				final lerpAmount:Float = CoolUtil.boundTo(1 - (elapsed * 30 * playbackRate), 0, 1);
-				iconP1.setGraphicSize(Std.int(FlxMath.lerp(iconP1.frameWidth, iconP1.width, lerpAmount)),
-					Std.int(FlxMath.lerp(iconP1.frameHeight, iconP1.height, lerpAmount)));
-				iconP2.setGraphicSize(Std.int(FlxMath.lerp(iconP2.frameWidth, iconP2.width, lerpAmount)),
-					Std.int(FlxMath.lerp(iconP2.frameHeight, iconP2.height, lerpAmount)));
+				final oldPsychLerpAmount:Float = CoolUtil.boundTo(1 - (elapsed * 30 * playbackRate), 0, 1);
+				iconP1.setGraphicSize(Std.int(FlxMath.lerp(iconP1.frameWidth, iconP1.width, oldPsychLerpAmount)),
+					Std.int(FlxMath.lerp(iconP1.frameHeight, iconP1.height, oldPsychLerpAmount)));
+				iconP2.setGraphicSize(Std.int(FlxMath.lerp(iconP2.frameWidth, iconP2.width, oldPsychLerpAmount)),
+					Std.int(FlxMath.lerp(iconP2.frameHeight, iconP2.height, oldPsychLerpAmount)));
 
 			case 'Strident Crisis':
 				iconSizeResetTime = Math.max(0, iconSizeResetTime - elapsed);
@@ -3545,9 +3545,9 @@ class PlayState extends MusicBeatState
 				iconP2.offset.y = iconOffset;
 
 			case 'New Psych', 'VS Steve':
-				final lerpAmount:Float = CoolUtil.boundTo(1 - (elapsed * 9 * playbackRate), 0, 1);
-				final multP1:Float = FlxMath.lerp(1, iconP1.scale.x, lerpAmount);
-				final multP2:Float = FlxMath.lerp(1, iconP2.scale.x, lerpAmount);
+				final newPsychLerpAmount:Float = CoolUtil.boundTo(1 - (elapsed * 9 * playbackRate), 0, 1);
+				final multP1:Float = FlxMath.lerp(1, iconP1.scale.x, newPsychLerpAmount);
+				final multP2:Float = FlxMath.lerp(1, iconP2.scale.x, newPsychLerpAmount);
 				iconP1.scale.set(multP1, multP1);
 				iconP2.scale.set(multP2, multP2);
 		}
