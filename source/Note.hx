@@ -508,10 +508,6 @@ class Note extends FlxSprite
 		if(copyAlpha)
 			alpha = strum.alpha * multAlpha;
 
-		// All notes on a lane share the same receptor direction. Cache its trigonometry
-		// once per receptor update instead of calculating sin/cos for every note.
-		if (copyX || copyY) strum.updateDirectionCache();
-
 		if(copyX)
 			x = strum.x + offsetX + strum.directionCos * distance;
 
