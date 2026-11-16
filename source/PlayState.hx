@@ -3384,7 +3384,9 @@ class PlayState extends MusicBeatState
 
 		skippedCount = 0;
 
+		final profT0:Float = haxe.Timer.stamp();
 		spawnNotes();
+		profSpawn = (haxe.Timer.stamp() - profT0) * 1000;
 
 		if (generatedMusic)
 		{
@@ -3396,12 +3398,19 @@ class PlayState extends MusicBeatState
 				else if (ClientPrefs.charsAndBG) playerDance();
 
 				amountOfRenderedNotes = 0;
+				final profT1:Float = haxe.Timer.stamp();
 				notes.forEach(updateNote);
-				if (notes.length > 1)
+				final profT2:Float = haxe.Timer.stamp();
+				// sorting thousands of notes by Y every frame is very slow; with that many notes the draw order is not visible, so sort every 4th frame
+				sortFrame++;
+				final doSort:Bool = sortFrame % 4 == 0;
+				if (notes.length > 1 && (notes.length <= 400 || doSort))
 					notes.sort(FlxSort.byY, ClientPrefs.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING);
 				sustainNotes.forEach(updateNote);
-				if (sustainNotes.length > 1)
+				if (sustainNotes.length > 1 && (sustainNotes.length <= 400 || doSort))
 					sustainNotes.sort(FlxSort.byY, ClientPrefs.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING);
+				profUpdate = (profT2 - profT1) * 1000;
+				profSort = (haxe.Timer.stamp() - profT2) * 1000 - 0;
 			}
 
 			destroyNotes();
@@ -3462,7 +3471,7 @@ class PlayState extends MusicBeatState
 
 		if (ClientPrefs.showRendered)
 		{
-			if (!ffmpegMode) renderedTxt.text = 'Rendered/Skipped: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(skippedCount)}/${formatNumber(maxRenderedNotes)}/${formatNumber(maxSkipped)}';
+			if (!ffmpegMode) renderedTxt.text = 'Rendered/Skipped: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(skippedCount)}/${formatNumber(maxRenderedNotes)}/${formatNumber(maxSkipped)}\nspawn ${Math.round(profSpawn * 10) / 10}ms | notes ${Math.round(profUpdate * 10) / 10}ms | sort+sus ${Math.round(profSort * 10) / 10}ms';
 			else renderedTxt.text = 'Rendered Notes: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(maxRenderedNotes)}/${formatNumber(notes.members.length + sustainNotes.members.length)}';
 		}
 
@@ -5097,6 +5106,10 @@ class PlayState extends MusicBeatState
 	var NOTE_SPAWN_TIME:Float = 0;
 	var targetNote:PreloadedChartNote = null;
 	var spawnedNote:Note;
+	var profSpawn:Float = 0;
+	var profUpdate:Float = 0;
+	var profSort:Float = 0;
+	var sortFrame:Int = 0;
 	var batchSkips:Bool = false;
 	var batchChar:Array<Character> = [null, null];
 	var batchAnim:Array<String> = [null, null];
@@ -5615,8 +5628,12 @@ class PlayState extends MusicBeatState
 	}
 
 	public function invalidateNote(note:Note):Void {
-		if (!killNotes.contains(note))
+		// flag instead of killNotes.contains(): scanning the whole list for every note was O(n^2) with thousands of notes
+		if (!note.inKillQueue)
+		{
+			note.inKillQueue = true;
 			killNotes.push(note);
+		}
 	}
 
 	var noteKill:Note = null;
@@ -5627,6 +5644,7 @@ class PlayState extends MusicBeatState
 		while (iterator.hasNext())
 		{
 			noteKill = iterator.next();
+			noteKill.inKillQueue = false;
 			noteKill.kill();
 		}
 		killNotes = [];

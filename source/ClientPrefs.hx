@@ -359,6 +359,14 @@ class ClientPrefs { //default settings if it can't find a save file containing y
 			FlxG.save.data.mobileSpeedPresetV1 = true;
 			FlxG.save.flush();
 		}
+		// preset V2: cap the notes that are alive on screen at once (the rest are still counted/hit, just not drawn)
+		if (FlxG.save.data.mobileSpeedPresetV2 != true)
+		{
+			maxNotes = 250;
+			FlxG.save.data.maxNotes = 250;
+			FlxG.save.data.mobileSpeedPresetV2 = true;
+			FlxG.save.flush();
+		}
 		// the touch hitbox is read through Controls like a gamepad, never through keyboard events
 		controllerMode = true;
 		#end
