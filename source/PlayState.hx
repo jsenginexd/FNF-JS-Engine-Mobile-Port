@@ -5145,7 +5145,8 @@ class PlayState extends MusicBeatState
 		final laneA:Int = a.noteData + (a.mustPress ? 8 : 0);
 		final laneB:Int = b.noteData + (b.mustPress ? 8 : 0);
 		if (laneA != laneB) return laneA > laneB;
-		return FlxSort.byValues(order, a.y, b.y) > 0;
+		// Avoid the generic comparator call in the per-frame insertion-sort hot path.
+		return order == FlxSort.ASCENDING ? a.y > b.y : a.y < b.y;
 	}
 
 	static function insertionSortNotes(group:FlxTypedGroup<Note>, order:Int):Void
