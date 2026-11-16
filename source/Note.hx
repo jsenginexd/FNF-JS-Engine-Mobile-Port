@@ -166,6 +166,11 @@ class Note extends FlxSprite
 	private var hitboxFrameWidth:Float = 0;
 	private var hitboxFrameHeight:Float = 0;
 
+	// Sustain animations usually remain unchanged for hundreds of frames.
+	// Cache the current animation object so we do not run endsWith() for every note every frame.
+	private var cachedSustainAnim:Dynamic = null;
+	private var cachedSustainIsEnd:Bool = false;
+
 	private inline function updateHitboxIfNeeded():Void
 	{
 		if (!hitboxCacheValid || hitboxScaleX != scale.x || hitboxScaleY != scale.y ||
@@ -487,14 +492,31 @@ class Note extends FlxSprite
 	{
 		if (isSustainNote)
 		{
-			flipY = strum.downScroll;
-			scale.set(0.7, animation != null && animation.curAnim != null && animation.curAnim.name.endsWith('end') ? 1 : Conductor.stepCrochet * 0.0105 * (songSpeed * multSpeed) * sustainScale);
+			if (flipY != strum.downScroll) flipY = strum.downScroll;
 
-			if (PlayState.isPixelStage)
+			final curAnim = animation == null ? null : animation.curAnim;
+			if (cachedSustainAnim != curAnim)
 			{
-				scale.y *= PlayState.daPixelZoom * 1.20;
-				scale.x *= PlayState.daPixelZoom;
+				cachedSustainAnim = curAnim;
+				cachedSustainIsEnd = curAnim != null && curAnim.name.endsWith('end');
 			}
+
+			var sustainScaleY:Float = cachedSustainIsEnd ? 1 : Conductor.stepCrochet * 0.0105 * (songSpeed * multSpeed) * sustainScale;
+			if (PlayState.isPixelStage) sustainScaleY *= PlayState.daPixelZoom * 1.20;
+
+			// copyScaleX overwrites X below, so do not write a temporary 0.7 value.
+			// Avoid dirtying the scale point when the sustain dimensions are unchanged.
+			if (copyScaleX)
+			{
+				if (scale.y != sustainScaleY) scale.y = sustainScaleY;
+			}
+			else
+			{
+				final sustainScaleX:Float = PlayState.isPixelStage ? PlayState.daPixelZoom * 0.7 : 0.7;
+				if (scale.x != sustainScaleX || scale.y != sustainScaleY)
+					scale.set(sustainScaleX, sustainScaleY);
+			}
+
 			// copyScaleX refreshes the hitbox after applying the receptor scale below.
 			// Avoid doing the same hitbox work twice for every sustain note each frame.
 			if (!copyScaleX) updateHitboxIfNeeded();
