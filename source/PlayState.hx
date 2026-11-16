@@ -3402,10 +3402,10 @@ class PlayState extends MusicBeatState
 				final profT1:Float = profileNotes ? haxe.Timer.stamp() : 0;
 				notes.forEach(updateNote);
 				final profT2:Float = profileNotes ? haxe.Timer.stamp() : 0;
-				// Lane order is stable; refresh vertical ordering every 4 frames for every chart size.
-				// Sorting small groups every single frame wasted CPU without improving lane batching.
+				// Lane order is stable; refresh vertical ordering every 16 frames to reduce sort overhead.
+				// This trades some vertical draw-order freshness for lower CPU cost on dense charts.
 				sortFrame++;
-				final doSort:Bool = sortFrame % 4 == 0;
+				final doSort:Bool = (sortFrame & 15) == 0;
 				if (notes.length > 1 && doSort)
 					notes.sort(sortByLaneThenY, ClientPrefs.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING);
 				sustainNotes.forEach(updateNote);
