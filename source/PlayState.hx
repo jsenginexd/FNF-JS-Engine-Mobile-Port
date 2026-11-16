@@ -5160,6 +5160,7 @@ class PlayState extends MusicBeatState
 				moves++;
 				if (moves > fallbackLimit)
 				{
+					members[j + 1] = current;
 					group.sort(sortByLaneThenY, order);
 					return;
 				}
