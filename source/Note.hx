@@ -472,7 +472,8 @@ class Note extends FlxSprite
 				scale.y *= PlayState.daPixelZoom * 1.20;
 				scale.x *= PlayState.daPixelZoom;
 			}
-			updateHitbox();
+			// copyScaleX updates the hitbox below; avoid rebuilding it twice per frame.
+			if (!copyScaleX) updateHitbox();
 		}
 
 		distance = (0.45 * (Conductor.songPosition - strumTime) * songSpeed * multSpeed);
