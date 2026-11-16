@@ -10,6 +10,23 @@ class StrumNote extends FlxSprite
 	public var resetAnim:Float = 0;
 	public var noteData:Int = 0;
 	public var direction:Float = 90;//plan on doing scroll directions soon -bb
+	public var directionCos:Float = 0;
+	public var directionSin:Float = 1;
+	private var cachedDirection:Float = 0;
+	private var directionCacheValid:Bool = false;
+
+	inline public function updateDirectionCache():Void
+	{
+		if (!directionCacheValid || cachedDirection != direction)
+		{
+			cachedDirection = direction;
+			final radians:Float = direction * Math.PI / 180;
+			directionCos = Math.cos(radians);
+			directionSin = Math.sin(radians);
+			directionCacheValid = true;
+		}
+	}
+
 	public var downScroll:Bool = false;//plan on doing scroll directions soon -bb
 	public var sustainReduce:Bool = true;
 
