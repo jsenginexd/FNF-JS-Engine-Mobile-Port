@@ -5223,12 +5223,11 @@ class PlayState extends MusicBeatState
 
 			amountOfRenderedNotes += daNote.noteDensity;
 			if (maxRenderedNotes < amountOfRenderedNotes) maxRenderedNotes = amountOfRenderedNotes;
-			daNote.followStrum((daNote.mustPress ? playerStrums : opponentStrums).members[daNote.noteData], songSpeed);
-			if (daNote.isSustainNote)
-			{
-				final strum = (daNote.mustPress ? playerStrums : opponentStrums).members[daNote.noteData];
-				if (strum != null && strum.sustainReduce) daNote.clipToStrumNote(strum);
-			}
+			// Reuse the receptor lookup for both positioning and sustain clipping.
+			final strum:StrumNote = (daNote.mustPress ? playerStrums : opponentStrums).members[daNote.noteData];
+			daNote.followStrum(strum, songSpeed);
+			if (daNote.isSustainNote && strum != null && strum.sustainReduce)
+				daNote.clipToStrumNote(strum);
 
 			if (Conductor.songPosition > noteKillOffset + daNote.strumTime)
 			{
