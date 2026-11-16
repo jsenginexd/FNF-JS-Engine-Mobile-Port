@@ -5169,7 +5169,6 @@ class PlayState extends MusicBeatState
 			//notesAddedCount = 0;
 			NOTE_SPAWN_TIME = (ClientPrefs.dynamicSpawnTime ? (1600 / songSpeed) : 1600 * ClientPrefs.noteSpawnTime);
 			targetNote = unspawnNotes[notesAddedCount];
-			limitNC = (notes.countLiving() + sustainNotes.countLiving());
 
 			if (targetNote != null && !targetNote.wasHit)
 			{
@@ -5180,8 +5179,11 @@ class PlayState extends MusicBeatState
 					notesAddedCount++;
 					if (unspawnNotes[notesAddedCount+1] != null) targetNote = unspawnNotes[notesAddedCount];
 					else break;
-					skippedCount++;
-					if (skippedCount > maxSkipped) maxSkipped = skippedCount;
+					if (ClientPrefs.showRendered)
+					{
+						skippedCount++;
+						if (skippedCount > maxSkipped) maxSkipped = skippedCount;
+					}
 				}
 				batchSkips = false;
 				flushSkipAnim(0);
@@ -5203,6 +5205,10 @@ class PlayState extends MusicBeatState
 			}
 			if (ClientPrefs.showNotes || !ClientPrefs.showNotes && !cpuControlled)
 			{
+				// Counting living notes walks both groups. Do it only once a note enters
+				// the spawn window, not on every frame while the next note is far away.
+				if (targetNote.strumTime - Conductor.songPosition < (NOTE_SPAWN_TIME / targetNote.multSpeed))
+					limitNC = notes.countLiving() + sustainNotes.countLiving();
 				while (limitNC < noteLimit && targetNote.strumTime - Conductor.songPosition < (NOTE_SPAWN_TIME / targetNote.multSpeed)) {
 					spawnedNote = (targetNote.isSustainNote ? sustainNotes : notes).recycle(Note);
 					spawnedNote.setupNoteData(targetNote);
@@ -5230,8 +5236,11 @@ class PlayState extends MusicBeatState
 			}
 			if (!daNote.exists) return;
 
-			amountOfRenderedNotes += daNote.noteDensity;
-			if (maxRenderedNotes < amountOfRenderedNotes) maxRenderedNotes = amountOfRenderedNotes;
+			if (ClientPrefs.showRendered)
+			{
+				amountOfRenderedNotes += daNote.noteDensity;
+				if (maxRenderedNotes < amountOfRenderedNotes) maxRenderedNotes = amountOfRenderedNotes;
+			}
 			// Reuse the receptor lookup for both positioning and sustain clipping.
 			final strum:StrumNote = (daNote.mustPress ? playerStrums : opponentStrums).members[daNote.noteData];
 			daNote.followStrum(strum, songSpeed);
