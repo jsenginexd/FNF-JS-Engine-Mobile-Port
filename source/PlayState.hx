@@ -3402,15 +3402,12 @@ class PlayState extends MusicBeatState
 				final profT1:Float = profileNotes ? haxe.Timer.stamp() : 0;
 				notes.forEach(updateNote);
 				final profT2:Float = profileNotes ? haxe.Timer.stamp() : 0;
-				// Lane order is stable; refresh vertical ordering every 16 frames to reduce sort overhead.
-				// This trades some vertical draw-order freshness for lower CPU cost on dense charts.
-				sortFrame++;
-				final doSort:Bool = (sortFrame & 15) == 0;
-				if (notes.length > 1 && doSort)
-					notes.sort(sortByLaneThenY, ClientPrefs.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING);
 				sustainNotes.forEach(updateNote);
-				if (sustainNotes.length > 1 && doSort)
-					sustainNotes.sort(sortByLaneThenY, ClientPrefs.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING);
+				// Notes move gradually, so their order is usually almost correct.
+				// Repair nearby changes cheaply and use the engine sort for large reorderings.
+				final sortOrder:Int = ClientPrefs.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING;
+				if (notes.length > 1) insertionSortNotes(notes, sortOrder);
+				if (sustainNotes.length > 1) insertionSortNotes(sustainNotes, sortOrder);
 				if (profileNotes)
 				{
 					profUpdate = (profT2 - profT1) * 1000;
@@ -5115,7 +5112,6 @@ class PlayState extends MusicBeatState
 	var profSpawn:Float = 0;
 	var profUpdate:Float = 0;
 	var profSort:Float = 0;
-	var sortFrame:Int = 0;
 	override function draw():Void
 	{
 		if (ClientPrefs.showRendered)
@@ -5135,6 +5131,42 @@ class PlayState extends MusicBeatState
 		final lb:Int = b.noteData + (b.mustPress ? 8 : 0);
 		if (la != lb) return la < lb ? -1 : 1;
 		return FlxSort.byValues(order, a.y, b.y);
+	}
+
+	static inline function noteComesAfter(a:Note, b:Note, order:Int):Bool
+	{
+		if (a == null) return b != null;
+		if (b == null) return false;
+		final laneA:Int = a.noteData + (a.mustPress ? 8 : 0);
+		final laneB:Int = b.noteData + (b.mustPress ? 8 : 0);
+		if (laneA != laneB) return laneA > laneB;
+		return FlxSort.byValues(order, a.y, b.y) > 0;
+	}
+
+	static function insertionSortNotes(group:FlxTypedGroup<Note>, order:Int):Void
+	{
+		final members = group.members;
+		final fallbackLimit:Int = members.length >> 1;
+		var moves:Int = 0;
+		var i:Int = 1;
+		while (i < members.length)
+		{
+			final current:Note = members[i];
+			var j:Int = i - 1;
+			while (j >= 0 && noteComesAfter(members[j], current, order))
+			{
+				members[j + 1] = members[j];
+				j--;
+				moves++;
+				if (moves > fallbackLimit)
+				{
+					group.sort(sortByLaneThenY, order);
+					return;
+				}
+			}
+			members[j + 1] = current;
+			i++;
+		}
 	}
 
 	var batchSkips:Bool = false;
