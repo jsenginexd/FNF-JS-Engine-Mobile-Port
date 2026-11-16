@@ -4806,6 +4806,22 @@ class PlayState extends MusicBeatState
 			}
 		}
 
+		// ezSpam intentionally hits the entire sorted lane; build that list before
+		// hit callbacks mutate note state. The normal path never allocates this array.
+		var spamNotes:Array<Note> = null;
+		if (hitCount > 2 && ClientPrefs.ezSpam)
+		{
+			spamNotes = [];
+			for (candidate in notes.members)
+			{
+				if (candidate != null && candidate.exists && !usingBotEnergy && !strumsBlocked[candidate.noteData] &&
+					candidate.canBeHit && candidate.mustPress && !candidate.tooLate && !candidate.wasGoodHit &&
+					!candidate.blockHit && !candidate.isSustainNote && candidate.noteData == key)
+					spamNotes.push(candidate);
+			}
+			spamNotes.sort(sortHitNotes);
+		}
+
 		if (firstNote != null)
 		{
 			var funnyNote:Note = firstNote; // front note
@@ -4826,20 +4842,8 @@ class PlayState extends MusicBeatState
 			}
 			goodNoteHit(funnyNote);
 
-			// Preserve ezSpam's full sorted hit list only when it is actually needed.
-			if (hitCount > 2 && ClientPrefs.ezSpam)
-			{
-				var spamNotes:Array<Note> = [];
-				for (candidate in notes.members)
-				{
-					if (candidate != null && candidate.exists && !usingBotEnergy && !strumsBlocked[candidate.noteData] &&
-						candidate.canBeHit && candidate.mustPress && !candidate.tooLate && !candidate.wasGoodHit &&
-						!candidate.blockHit && !candidate.isSustainNote && candidate.noteData == key)
-						spamNotes.push(candidate);
-				}
-				spamNotes.sort(sortHitNotes);
+			if (spamNotes != null)
 				for (i in 1...spamNotes.length) goodNoteHit(spamNotes[i]);
-			}
 		}
 		else {
 			callOnLuas('onGhostTap', [key]);
