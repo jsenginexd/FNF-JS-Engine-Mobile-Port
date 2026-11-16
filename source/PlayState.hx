@@ -277,6 +277,8 @@ class PlayState extends MusicBeatState
 	public var missRecalcsPerFrame:Int = 0;
 	public var hitImagesFrame:Int = 0;
 
+	var npsSum:Float = 0; // running totals of the two NPS arrays (no need to re-add every hit each frame)
+	var oppNpsSum:Float = 0;
 	var notesHitArray:Array<Float> = [];
 	var oppNotesHitArray:Array<Float> = [];
 	var notesHitDateArray:Array<Float> = [];
@@ -3125,13 +3127,17 @@ class PlayState extends MusicBeatState
 			}
 		}
 		if (ClientPrefs.showNPS && (notesHitDateArray.length > 0 || oppNotesHitDateArray.length > 0)) {
+			// hits are stored in time order, so stop at the first one that is still inside the window
 			notesToRemoveCount = 0;
 			var i = 0;
+			final npsWindow:Float = 1000 * npsSpeedMult;
 
 			while (i < notesHitDateArray.length) {
-				if (!Math.isNaN(notesHitDateArray[i]) && (notesHitDateArray[i] + 1000 * npsSpeedMult < Conductor.songPosition)) {
+				if (!Math.isNaN(notesHitDateArray[i]) && (notesHitDateArray[i] + npsWindow < Conductor.songPosition)) {
+					npsSum -= notesHitArray[i];
 					notesToRemoveCount++;
 				}
+				else break;
 				i++;
 			}
 
@@ -3139,18 +3145,19 @@ class PlayState extends MusicBeatState
 				notesHitDateArray.splice(0, notesToRemoveCount);
 				notesHitArray.splice(0, notesToRemoveCount);
 			}
+			if (notesHitArray.length == 0) npsSum = 0;
 
-			nps = 0;
-			for (value in notesHitArray)
-				nps += value;
+			nps = npsSum;
 
 			oppNotesToRemoveCount = 0;
 			i = 0;
 
 			while (i < oppNotesHitDateArray.length) {
-				if (!Math.isNaN(oppNotesHitDateArray[i]) && (oppNotesHitDateArray[i] + 1000 * npsSpeedMult < Conductor.songPosition)) {
+				if (!Math.isNaN(oppNotesHitDateArray[i]) && (oppNotesHitDateArray[i] + npsWindow < Conductor.songPosition)) {
+					oppNpsSum -= oppNotesHitArray[i];
 					oppNotesToRemoveCount++;
 				}
+				else break;
 				i++;
 			}
 
@@ -3158,11 +3165,9 @@ class PlayState extends MusicBeatState
 				oppNotesHitDateArray.splice(0, oppNotesToRemoveCount);
 				oppNotesHitArray.splice(0, oppNotesToRemoveCount);
 			}
+			if (oppNotesHitArray.length == 0) oppNpsSum = 0;
 
-			oppNPS = 0;
-			for (value in oppNotesHitArray) {
-				oppNPS += value;
-			}
+			oppNPS = oppNpsSum;
 
 			if (oppNPS > maxOppNPS) {
 				maxOppNPS = oppNPS;
@@ -5213,6 +5218,7 @@ class PlayState extends MusicBeatState
 					totalNotesPlayed += 1 * (opponentChart ? polyphonyOppo : polyphonyBF);
 					if (ClientPrefs.showNPS) { //i dont think we should be pushing to 2 arrays at the same time but oh well
 						notesHitArray.push(1 * (opponentChart ? polyphonyOppo : polyphonyBF));
+						npsSum += 1 * (opponentChart ? polyphonyOppo : polyphonyBF);
 						notesHitDateArray.push(Conductor.songPosition);
 					}
 					if (!ClientPrefs.lessBotLag) popUpScore(note);
@@ -5387,13 +5393,18 @@ class PlayState extends MusicBeatState
 				totalNotesPlayed += 1 * (opponentChart ? polyphonyOppo : polyphonyBF);
 				if (ClientPrefs.showNPS) { //i dont think we should be pushing to 2 arrays at the same time but oh well
 					notesHitArray.push(1 * (opponentChart ? polyphonyOppo : polyphonyBF));
+					npsSum += 1 * (opponentChart ? polyphonyOppo : polyphonyBF);
 					notesHitDateArray.push(Conductor.songPosition);
 				}
 				if ((opponentChart ? polyphonyOppo : polyphonyBF) > 1) totalNotes += (opponentChart ? polyphonyOppo : polyphonyBF) - 1;
 			}
 			if (!ClientPrefs.noSkipFuncs) callOnLuas((oppTrigger ? 'opponentNoteSkip' : 'goodNoteSkip'), [null, Math.abs(noteAlt.noteData), noteAlt.noteType, noteAlt.isSustainNote]);
 			health += noteAlt.hitHealth * healthGain * (opponentChart ? polyphonyOppo : polyphonyBF);
-			if (!ffmpegMode) (opponentChart ? opponentVocals : vocals).volume = 1;
+			if (!ffmpegMode)
+			{
+				final voc = (opponentChart ? opponentVocals : vocals);
+				if (voc != null && voc.volume != 1) voc.volume = 1;
+			}
 		}
 		return;
 	}
@@ -5468,6 +5479,7 @@ class PlayState extends MusicBeatState
 			{
 				if (ClientPrefs.showNPS) { //i dont think we should be pushing to 2 arrays at the same time but oh well
 					oppNotesHitArray.push(1 * polyphonyOppo);
+					oppNpsSum += 1 * polyphonyOppo;
 					oppNotesHitDateArray.push(Conductor.songPosition);
 				}
 				enemyHits += 1 * polyphonyOppo;
@@ -5545,6 +5557,7 @@ class PlayState extends MusicBeatState
 			{
 				if (ClientPrefs.showNPS) { //i dont think we should be pushing to 2 arrays at the same time but oh well
 					oppNotesHitArray.push(1 * polyphonyOppo);
+					oppNpsSum += 1 * polyphonyOppo;
 					oppNotesHitDateArray.push(Conductor.songPosition);
 				}
 				enemyHits += 1 * polyphonyOppo;
