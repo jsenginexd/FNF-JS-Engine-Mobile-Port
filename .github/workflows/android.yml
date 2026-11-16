@@ -8,6 +8,10 @@ name: Android Build
 # create the GitHub Release (the APK is the only file attached to it).
 
 on:
+  # Build pull requests for validation; PR builds upload an APK artifact but do not publish releases.
+  pull_request:
+    branches:
+      - main
   # every push to main builds the APK and attaches it to the "MobilePort" release
   push:
     branches:
@@ -250,7 +254,7 @@ jobs:
           git push -f origin refs/tags/MobilePort
 
       - name: Publish release (APK only)
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.publish }}
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish) }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || (github.event_name == 'workflow_dispatch' && inputs.tag_name || 'MobilePort') }}
