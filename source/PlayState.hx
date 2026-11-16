@@ -4877,6 +4877,24 @@ class PlayState extends MusicBeatState
 		return -1;
 	}
 
+	// Check active sustain notes without creating a temporary [notes, sustainNotes] array each frame.
+	inline function checkHeldNotes(group:FlxTypedGroup<Note>):Void
+	{
+		final members:Array<Note> = group.members;
+		final length:Int = members.length;
+		var i:Int = 0;
+		while (i < length)
+		{
+			final n:Note = members[i++];
+			if (n != null && n.exists && !usingBotEnergy && !strumsBlocked[n.noteData] &&
+				n.canBeHit && n.mustPress && !n.tooLate && !n.wasGoodHit && !n.blockHit &&
+				n.isSustainNote && holdArray[n.noteData])
+			{
+				goodNoteHit(n);
+			}
+		}
+	}
+
 	// Hold notes
 	private function keyShit():Void
 	{
@@ -4908,23 +4926,8 @@ class PlayState extends MusicBeatState
 		if (opponentChart) char = dad;
 		if (startedCountdown && !char.stunned && generatedMusic)
 		{
-			for (group in [notes, sustainNotes]){
-				if (group.length > 0)
-				{
-					for (n in group.members)
-					{ // I can't do a filter here, that's kinda awesome
-						var canHit:Bool = (n != null && n.exists && !usingBotEnergy && !strumsBlocked[n.noteData] && n.canBeHit && n.mustPress && !n.tooLate && !n.wasGoodHit && !n.blockHit);
-
-						if (canHit && n.isSustainNote)
-						{
-							var released:Bool = !holdArray[n.noteData];
-
-							if (!released)
-								goodNoteHit(n);
-						}
-					}
-				}
-			}
+			checkHeldNotes(notes);
+			checkHeldNotes(sustainNotes);
 
 			if (!holdArray.contains(true) || endingSong) {
 				if (ClientPrefs.charsAndBG) playerDance();
