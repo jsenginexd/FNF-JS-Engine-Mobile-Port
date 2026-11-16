@@ -451,7 +451,8 @@ class Note extends FlxSprite
 
 	override function update(elapsed:Float)
 	{
-		if (Main.isPlayState() && PlayState.instance.cpuControlled) return;
+		// Avoid reflection-based class-name checks in this per-note, per-frame path.
+		if (PlayState.instance != null && FlxG.state == PlayState.instance && PlayState.instance.cpuControlled) return;
 
 		super.update(elapsed);
 
