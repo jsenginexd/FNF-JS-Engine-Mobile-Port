@@ -2986,6 +2986,8 @@ class PlayState extends MusicBeatState
 
 	var noteLimit = ClientPrefs.maxNotes;
 	var limitNC = 0;
+	// Large note groups do not need a full draw-order repair on every frame.
+	var noteSortFrame:Int = 0;
 	public var amountOfRenderedNotes:Float = 0;
 	public var maxRenderedNotes:Float = 0;
 	public var skippedCount:Float = 0;
@@ -3402,14 +3404,41 @@ class PlayState extends MusicBeatState
 
 				amountOfRenderedNotes = 0;
 				final profT1:Float = profileNotes ? haxe.Timer.stamp() : 0;
-				notes.forEach(updateNote);
+
+				// Walk the backing arrays directly. This avoids the per-member callback
+				// dispatch in FlxTypedGroup.forEach on charts with thousands of notes.
+				final noteMembers:Array<Note> = notes.members;
+				final noteLength:Int = notes.length;
+				var noteIndex:Int = 0;
+				while (noteIndex < noteLength)
+				{
+					updateNote(noteMembers[noteIndex]);
+					noteIndex++;
+				}
 				final profT2:Float = profileNotes ? haxe.Timer.stamp() : 0;
-				sustainNotes.forEach(updateNote);
-				// Notes move gradually, so their order is usually almost correct.
-				// Repair nearby changes cheaply and use the engine sort for large reorderings.
+
+				final sustainMembers:Array<Note> = sustainNotes.members;
+				final sustainLength:Int = sustainNotes.length;
+				noteIndex = 0;
+				while (noteIndex < sustainLength)
+				{
+					updateNote(sustainMembers[noteIndex]);
+					noteIndex++;
+				}
+
+				// Keep small charts perfectly ordered every frame. On dense charts,
+				// repair draw order every fourth frame instead of scanning both arrays
+				// on every frame; lane order remains stable between repairs.
 				final sortOrder:Int = ClientPrefs.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING;
-				if (notes.length > 1) insertionSortNotes(notes, sortOrder);
-				if (sustainNotes.length > 1) insertionSortNotes(sustainNotes, sortOrder);
+				final totalNotes:Int = noteLength + sustainLength;
+				final sortInterval:Int = totalNotes > 400 ? 4 : 1;
+				noteSortFrame++;
+				if (noteSortFrame >= sortInterval)
+				{
+					noteSortFrame = 0;
+					if (noteLength > 1) insertionSortNotes(notes, sortOrder);
+					if (sustainLength > 1) insertionSortNotes(sustainNotes, sortOrder);
+				}
 				if (profileNotes)
 				{
 					profUpdate = (profT2 - profT1) * 1000;
