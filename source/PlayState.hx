@@ -4991,10 +4991,12 @@ class PlayState extends MusicBeatState
 		if (opponentChart) char = dad;
 		if (startedCountdown && !char.stunned && generatedMusic)
 		{
-			checkHeldNotes(notes);
-			checkHeldNotes(sustainNotes);
+			// Regular notes never contain sustain segments; only scan the sustain
+			// group, and only while a lane is actually held by the player.
+			if (strumHeldAmount > 0 && !usingBotEnergy)
+				checkHeldNotes(sustainNotes);
 
-			if (!holdArray.contains(true) || endingSong) {
+			if (strumHeldAmount == 0 || endingSong) {
 				if (ClientPrefs.charsAndBG) playerDance();
 			}
 
