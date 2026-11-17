@@ -81,6 +81,7 @@ class Note extends FlxSprite
 	public var tooLate:Bool = false;
 	public var wasGoodHit:Bool = false;
 	public var inKillQueue:Bool = false; // already waiting in PlayState.killNotes
+	public var countsTowardLimit:Bool = false; // included in PlayState.limitNC
 	public var ignoreNote:Bool = false;
 	public var hitByOpponent:Bool = false; //For Opponent notes
 
