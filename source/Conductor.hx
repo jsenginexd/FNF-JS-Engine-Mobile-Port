@@ -96,6 +96,11 @@ class Conductor
 		final length:Int = bpmChangeMap.length;
 		var index:Int = bpmTimeIndex;
 
+		// Before the first BPM change, the base event remains active. Avoid
+		// repeating a binary search on every frame of the opening section.
+		if (index < 0 && length > 0 && bpmChangeMap[0].songTime > time)
+			return getBaseBPMEvent();
+
 		// Song playback normally moves forward. Reuse the active segment and
 		// advance only across BPM changes crossed since the previous lookup.
 		if (index >= 0 && index < length)
@@ -133,6 +138,9 @@ class Conductor
 	{
 		final length:Int = bpmChangeMap.length;
 		var index:Int = bpmStepIndex;
+
+		if (index < 0 && length > 0 && bpmChangeMap[0].stepTime > step)
+			return getBaseBPMEvent();
 
 		if (index >= 0 && index < length)
 		{
