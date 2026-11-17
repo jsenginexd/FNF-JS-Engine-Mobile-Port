@@ -605,6 +605,20 @@ class Note extends FlxSprite
 			clipWidth = width / scale.x;
 		}
 
+		// A sustain that has not reached the receptor needs no clipping at all.
+		// Keep the full-frame state cached without allocating a FlxRect or clipped frame.
+		if (clipRect == null && clipX == 0 && clipY == 0 &&
+			clipWidth == frameWidth && clipHeight == frameHeight)
+		{
+			clipCacheFrame = currentFrame;
+			clipCacheX = clipX;
+			clipCacheY = clipY;
+			clipCacheWidth = clipWidth;
+			clipCacheHeight = clipHeight;
+			clipCacheValid = true;
+			return;
+		}
+
 		// frame.clipTo() is relatively expensive. Skip it when this sustain's
 		// frame and effective clip rectangle are identical to the previous frame.
 		if (clipCacheValid && clipCacheFrame == currentFrame && clipCacheX == clipX &&
