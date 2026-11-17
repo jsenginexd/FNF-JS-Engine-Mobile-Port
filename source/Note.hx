@@ -526,10 +526,16 @@ class Note extends FlxSprite
 		if (!ClientPrefs.downScroll) distance *= -1;
 
 		if (copyAngle)
-			angle = strum.direction - 90 + strum.angle + offsetAngle;
+		{
+			final targetAngle:Float = strum.direction - 90 + strum.angle + offsetAngle;
+			if (angle != targetAngle) angle = targetAngle;
+		}
 
-		if(copyAlpha)
-			alpha = strum.alpha * multAlpha;
+		if (copyAlpha)
+		{
+			final targetAlpha:Float = strum.alpha * multAlpha;
+			if (alpha != targetAlpha) alpha = targetAlpha;
+		}
 
 		if(copyX)
 			x = strum.x + offsetX + strum.directionCos * distance;
@@ -547,14 +553,16 @@ class Note extends FlxSprite
 			}
 		}
 
-		if(copyScaleX)
+		if (copyScaleX)
 		{
-			scale.x = strum.scale.x;
+			final targetScaleX:Float = strum.scale.x;
+			if (scale.x != targetScaleX) scale.x = targetScaleX;
 			if (isSustainNote) updateHitboxIfNeeded();
 		}
-		if(copyScaleY && !isSustainNote)
+		if (copyScaleY && !isSustainNote)
 		{
-			scale.y = strum.scale.y;
+			final targetScaleY:Float = strum.scale.y;
+			if (scale.y != targetScaleY) scale.y = targetScaleY;
 		}
 	}
 
