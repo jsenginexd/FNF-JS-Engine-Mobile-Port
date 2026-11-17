@@ -4593,7 +4593,7 @@ class PlayState extends MusicBeatState
 			if (group != null){
 				while (group.length > 0) {
 					final note:Note = group.members[0];
-					note.countsTowardLimit = false;
+					if (note != null) note.countsTowardLimit = false;
 					group.remove(note, true);
 				}
 			}
