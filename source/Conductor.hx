@@ -37,6 +37,10 @@ class Conductor
 		return Math.round(getBeat(sex) * ROWS_PER_BEAT);
 
 	public static var bpmChangeMap:Array<BPMChangeEvent> = [];
+	// Cached BPM-map cursors make the common forward-playback lookup O(1).
+	// Binary search remains the fallback for seeks and out-of-order queries.
+	private static var bpmTimeIndex:Int = -1;
+	private static var bpmStepIndex:Int = -1;
 
 	public function new()
 	{
@@ -69,55 +73,85 @@ class Conductor
 
 	public static function getBPMFromSeconds(time:Float):BPMChangeEvent
 	{
-		var lastChange:BPMChangeEvent = {
+		final length:Int = bpmChangeMap.length;
+		var index:Int = bpmTimeIndex;
+
+		// Song playback normally moves forward. Reuse the active segment and
+		// advance only across BPM changes crossed since the previous lookup.
+		if (index >= 0 && index < length)
+		{
+			if (bpmChangeMap[index].songTime <= time)
+			{
+				while (index + 1 < length && bpmChangeMap[index + 1].songTime <= time) index++;
+				if (index == length - 1 || bpmChangeMap[index + 1].songTime > time)
+				{
+					bpmTimeIndex = index;
+					return bpmChangeMap[index];
+				}
+			}
+		}
+
+		// Seeks, rewinds and queries before the first change use binary search.
+		var low:Int = 0;
+		var high:Int = length - 1;
+		var found:Int = -1;
+		while (low <= high)
+		{
+			final mid:Int = low + ((high - low) >> 1);
+			if (bpmChangeMap[mid].songTime <= time)
+			{
+				found = mid;
+				low = mid + 1;
+			}
+			else high = mid - 1;
+		}
+		bpmTimeIndex = found;
+		return found >= 0 ? bpmChangeMap[found] : {
 			stepTime: 0,
 			songTime: 0,
 			bpm: bpm,
 			stepCrochet: stepCrochet
 		};
-
-		// BPM changes are appended in song-time order. Find the last change at
-		// or before this timestamp without scanning the entire map each lookup.
-		var low:Int = 0;
-		var high:Int = bpmChangeMap.length - 1;
-		while (low <= high)
-		{
-			final mid:Int = low + ((high - low) >> 1);
-			final change:BPMChangeEvent = bpmChangeMap[mid];
-			if (change.songTime <= time)
-			{
-				lastChange = change;
-				low = mid + 1;
-			}
-			else high = mid - 1;
-		}
-		return lastChange;
 	}
 
 	public static function getBPMFromStep(step:Float):BPMChangeEvent
 	{
-		var lastChange:BPMChangeEvent = {
+		final length:Int = bpmChangeMap.length;
+		var index:Int = bpmStepIndex;
+
+		if (index >= 0 && index < length)
+		{
+			if (bpmChangeMap[index].stepTime <= step)
+			{
+				while (index + 1 < length && bpmChangeMap[index + 1].stepTime <= step) index++;
+				if (index == length - 1 || bpmChangeMap[index + 1].stepTime > step)
+				{
+					bpmStepIndex = index;
+					return bpmChangeMap[index];
+				}
+			}
+		}
+
+		var low:Int = 0;
+		var high:Int = length - 1;
+		var found:Int = -1;
+		while (low <= high)
+		{
+			final mid:Int = low + ((high - low) >> 1);
+			if (bpmChangeMap[mid].stepTime <= step)
+			{
+				found = mid;
+				low = mid + 1;
+			}
+			else high = mid - 1;
+		}
+		bpmStepIndex = found;
+		return found >= 0 ? bpmChangeMap[found] : {
 			stepTime: 0,
 			songTime: 0,
 			bpm: bpm,
 			stepCrochet: stepCrochet
 		};
-
-		// The step map uses the same chronological ordering as the time map.
-		var low:Int = 0;
-		var high:Int = bpmChangeMap.length - 1;
-		while (low <= high)
-		{
-			final mid:Int = low + ((high - low) >> 1);
-			final change:BPMChangeEvent = bpmChangeMap[mid];
-			if (change.stepTime <= step)
-			{
-				lastChange = change;
-				low = mid + 1;
-			}
-			else high = mid - 1;
-		}
-		return lastChange;
 	}
 
 	public static function beatToSeconds(beat:Float): Float{
@@ -147,6 +181,7 @@ class Conductor
 	public static function mapBPMChanges(song:SwagSong)
 	{
 		bpmChangeMap = [];
+		bpmTimeIndex = bpmStepIndex = -1;
 
 		var curBPM:Float = song.bpm;
 		var totalSteps:Int = 0;
