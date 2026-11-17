@@ -2178,8 +2178,13 @@ class PlayState extends MusicBeatState
 				var daNote:Note = group.members[i];
 				if(daNote.strumTime - 350 < time)
 				{
-					// Keep the live-note counter in sync without recounting both groups.
-					if (daNote.exists && daNote.alive && !daNote.inKillQueue && limitNC > 0) limitNC--;
+					// A note can be queued for destruction and cleared by a seek in the
+					// same frame. The per-note flag prevents the live counter decrementing twice.
+					if (daNote.countsTowardLimit)
+					{
+						daNote.countsTowardLimit = false;
+						if (limitNC > 0) limitNC--;
+					}
 					daNote.active = false;
 					daNote.visible = false;
 					daNote.ignoreNote = true;
@@ -4587,7 +4592,9 @@ class PlayState extends MusicBeatState
 		for (group in [notes, sustainNotes]){
 			if (group != null){
 				while (group.length > 0) {
-					group.remove(group.members[0], true);
+					final note:Note = group.members[0];
+					note.countsTowardLimit = false;
+					group.remove(note, true);
 				}
 			}
 		}
@@ -5339,6 +5346,7 @@ class PlayState extends MusicBeatState
 				while (limitNC < noteLimit && targetNote.strumTime - Conductor.songPosition < (NOTE_SPAWN_TIME / targetNote.multSpeed)) {
 					spawnedNote = (targetNote.isSustainNote ? sustainNotes : notes).recycle(Note);
 					spawnedNote.setupNoteData(targetNote);
+					spawnedNote.countsTowardLimit = true;
 
 					if (!ClientPrefs.noSpawnFunc) callOnLuas('onSpawnNote', [(!spawnedNote.isSustainNote ? notes.members.indexOf(spawnedNote) : sustainNotes.members.indexOf(spawnedNote)), targetNote.noteData, targetNote.noteType, targetNote.isSustainNote]);
 					notesAddedCount++; limitNC++;
@@ -5831,7 +5839,11 @@ class PlayState extends MusicBeatState
 		{
 			noteKill = killNotes[i++];
 			noteKill.inKillQueue = false;
-			if (noteKill.exists && noteKill.alive && limitNC > 0) limitNC--;
+			if (noteKill.countsTowardLimit)
+			{
+				noteKill.countsTowardLimit = false;
+				if (limitNC > 0) limitNC--;
+			}
 			noteKill.kill();
 		}
 		killNotes.resize(0);
