@@ -45,6 +45,17 @@ class Conductor
 		stepCrochet: stepCrochet
 	};
 
+	private static inline function getBaseBPMEvent():BPMChangeEvent
+	{
+		// Keep compatibility with scripts that assign Conductor.bpm directly.
+		if (baseBPMEvent.bpm != bpm || baseBPMEvent.stepCrochet != stepCrochet)
+		{
+			baseBPMEvent.bpm = bpm;
+			baseBPMEvent.stepCrochet = stepCrochet;
+		}
+		return baseBPMEvent;
+	}
+
 	public static var bpmChangeMap:Array<BPMChangeEvent> = [];
 	// Cached BPM-map cursors make the common forward-playback lookup O(1).
 	// Binary search remains the fallback for seeks and out-of-order queries.
@@ -115,7 +126,7 @@ class Conductor
 			else high = mid - 1;
 		}
 		bpmTimeIndex = found;
-		return found >= 0 ? bpmChangeMap[found] : baseBPMEvent;
+		return found >= 0 ? bpmChangeMap[found] : getBaseBPMEvent();
 	}
 
 	public static function getBPMFromStep(step:Float):BPMChangeEvent
@@ -150,7 +161,7 @@ class Conductor
 			else high = mid - 1;
 		}
 		bpmStepIndex = found;
-		return found >= 0 ? bpmChangeMap[found] : baseBPMEvent;
+		return found >= 0 ? bpmChangeMap[found] : getBaseBPMEvent();
 	}
 
 	public static function beatToSeconds(beat:Float): Float{
