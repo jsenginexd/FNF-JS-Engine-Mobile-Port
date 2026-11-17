@@ -4951,9 +4951,8 @@ class PlayState extends MusicBeatState
 		while (i < length)
 		{
 			final n:Note = members[i++];
-			if (n != null && n.exists && !usingBotEnergy && !strumsBlocked[n.noteData] &&
-				n.canBeHit && n.mustPress && !n.tooLate && !n.wasGoodHit && !n.blockHit &&
-				n.isSustainNote && holdArray[n.noteData])
+			if (n != null && n.exists && n.mustPress && holdArray[n.noteData] &&
+				!strumsBlocked[n.noteData] && n.canBeHit && !n.tooLate && !n.wasGoodHit && !n.blockHit)
 			{
 				goodNoteHit(n);
 			}
