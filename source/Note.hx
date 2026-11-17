@@ -582,6 +582,7 @@ class Note extends FlxSprite
 
 		final currentFrame:Dynamic = frame;
 		if (currentFrame == null) return;
+		@:privateAccess if (_frame == null) return;
 
 		final center:Float = myStrum.y + offsetY + Note.swagWidth / 2;
 		var clipX:Float = 0;
