@@ -5814,16 +5814,17 @@ class PlayState extends MusicBeatState
 	var noteKill:Note = null;
 	public function destroyNotes():Void
 	{
-		final iterator:Iterator<Note> = killNotes.iterator();
-
-		while (iterator.hasNext())
+		// This runs every frame. Reuse the queue storage and avoid allocating an
+		// Iterator and a replacement Array when there are no notes to destroy.
+		var i:Int = 0;
+		while (i < killNotes.length)
 		{
-			noteKill = iterator.next();
+			noteKill = killNotes[i++];
 			noteKill.inKillQueue = false;
 			if (noteKill.exists && noteKill.alive && limitNC > 0) limitNC--;
 			noteKill.kill();
 		}
-		killNotes = [];
+		killNotes.resize(0);
 	}
 
 	public function spawnHoldSplashOnNote(note:Note, ?isDad:Bool = false) {
