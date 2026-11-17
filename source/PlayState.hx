@@ -3425,6 +3425,7 @@ class PlayState extends MusicBeatState
 					updateNote(sustainMembers[noteIndex]);
 					noteIndex++;
 				}
+				final profT3:Float = profileNotes ? haxe.Timer.stamp() : 0;
 
 				// Keep small charts perfectly ordered every frame. On dense charts,
 				// repair draw order every fourth frame instead of scanning both arrays
@@ -3439,10 +3440,12 @@ class PlayState extends MusicBeatState
 					if (noteLength > 1) insertionSortNotes(notes, sortOrder);
 					if (sustainLength > 1) insertionSortNotes(sustainNotes, sortOrder);
 				}
+				final profT4:Float = profileNotes ? haxe.Timer.stamp() : 0;
 				if (profileNotes)
 				{
 					profUpdate = (profT2 - profT1) * 1000;
-					profSort = (haxe.Timer.stamp() - profT2) * 1000;
+					profSustain = (profT3 - profT2) * 1000;
+					profSort = (profT4 - profT3) * 1000;
 				}
 			}
 
@@ -3504,7 +3507,7 @@ class PlayState extends MusicBeatState
 
 		if (ClientPrefs.showRendered)
 		{
-			if (!ffmpegMode) renderedTxt.text = 'Rendered/Skipped: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(skippedCount)}/${formatNumber(maxRenderedNotes)}/${formatNumber(maxSkipped)}\nspawn ${Math.round(profSpawn * 10) / 10}ms | notes ${Math.round(profUpdate * 10) / 10}ms | sort+sus ${Math.round(profSort * 10) / 10}ms | draw ${Math.round(profDraw * 10) / 10}ms';
+			if (!ffmpegMode) renderedTxt.text = 'Rendered/Skipped: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(skippedCount)}/${formatNumber(maxRenderedNotes)}/${formatNumber(maxSkipped)}\nspawn ${Math.round(profSpawn * 10) / 10}ms | notes ${Math.round(profUpdate * 10) / 10}ms | sustain ${Math.round(profSustain * 10) / 10}ms | sort ${Math.round(profSort * 10) / 10}ms | draw ${Math.round(profDraw * 10) / 10}ms';
 			else renderedTxt.text = 'Rendered Notes: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(maxRenderedNotes)}/${formatNumber(notes.members.length + sustainNotes.members.length)}';
 		}
 
@@ -4815,11 +4818,14 @@ class PlayState extends MusicBeatState
 		var firstNote:Note = null;
 		var secondNote:Note = null;
 		var hitCount:Int = 0;
+		// A blocked lane or active bot-energy input makes every candidate invalid.
+		// Check it once instead of repeating the same branch for every active note.
+		if (!usingBotEnergy && !strumsBlocked[key])
 		for (candidate in notes.members)
 		{
-			if (candidate == null || !candidate.exists || usingBotEnergy || strumsBlocked[candidate.noteData] ||
+			if (candidate == null || !candidate.exists || candidate.noteData != key ||
 				!candidate.canBeHit || !candidate.mustPress || candidate.tooLate || candidate.wasGoodHit ||
-				candidate.blockHit || candidate.isSustainNote || candidate.noteData != key) continue;
+				candidate.blockHit || candidate.isSustainNote) continue;
 
 			hitCount++;
 			if (firstNote == null || (firstNote.lowPriority && !candidate.lowPriority) ||
@@ -4843,9 +4849,9 @@ class PlayState extends MusicBeatState
 			spamNotes = [];
 			for (candidate in notes.members)
 			{
-				if (candidate != null && candidate.exists && !usingBotEnergy && !strumsBlocked[candidate.noteData] &&
-					candidate.canBeHit && candidate.mustPress && !candidate.tooLate && !candidate.wasGoodHit &&
-					!candidate.blockHit && !candidate.isSustainNote && candidate.noteData == key)
+				if (candidate != null && candidate.exists && candidate.noteData == key &&
+					!usingBotEnergy && !strumsBlocked[key] && candidate.canBeHit && candidate.mustPress &&
+					!candidate.tooLate && !candidate.wasGoodHit && !candidate.blockHit && !candidate.isSustainNote)
 					spamNotes.push(candidate);
 			}
 			spamNotes.sort(sortHitNotes);
@@ -5185,6 +5191,7 @@ class PlayState extends MusicBeatState
 	var profDraw:Float = 0;
 	var profSpawn:Float = 0;
 	var profUpdate:Float = 0;
+	var profSustain:Float = 0;
 	var profSort:Float = 0;
 	override function draw():Void
 	{
@@ -5201,6 +5208,8 @@ class PlayState extends MusicBeatState
 	// time the shader changes, so sorting by Y alone alternated shaders on almost every note (one draw call per note).
 	static function sortByLaneThenY(order:Int, a:Note, b:Note):Int
 	{
+		if (a == null) return b == null ? 0 : 1;
+		if (b == null) return -1;
 		final la:Int = a.noteData + (a.mustPress ? 8 : 0);
 		final lb:Int = b.noteData + (b.mustPress ? 8 : 0);
 		if (la != lb) return la < lb ? -1 : 1;
