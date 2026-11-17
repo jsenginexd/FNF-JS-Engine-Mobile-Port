@@ -171,6 +171,15 @@ class Note extends FlxSprite
 	private var cachedSustainAnim:Dynamic = null;
 	private var cachedSustainIsEnd:Bool = false;
 
+	// Cache the last clipping rectangle. Most sustain notes are not crossing a receptor,
+	// so repeatedly clipping an unchanged full frame is wasted CPU work.
+	private var clipCacheValid:Bool = false;
+	private var clipCacheFrame:Dynamic = null;
+	private var clipCacheX:Float = 0;
+	private var clipCacheY:Float = 0;
+	private var clipCacheWidth:Float = 0;
+	private var clipCacheHeight:Float = 0;
+
 	private inline function updateHitboxIfNeeded():Void
 	{
 		if (!hitboxCacheValid || hitboxScaleX != scale.x || hitboxScaleY != scale.y ||
@@ -568,38 +577,68 @@ class Note extends FlxSprite
 
 	public function clipToStrumNote(myStrum:StrumNote)
 	{
-		final center:Float = myStrum.y + offsetY + Note.swagWidth / 2;
 		if (!isSustainNote || (!mustPress && ignoreNote) ||
 			(mustPress && !wasGoodHit && canBeHit)) return;
 
-		if (clipRect == null) clipRect = FlxRect.get(0, 0, frameWidth, frameHeight);
-		final swagRect = clipRect;
+		final currentFrame:Dynamic = frame;
+		if (currentFrame == null) return;
+
+		final center:Float = myStrum.y + offsetY + Note.swagWidth / 2;
+		var clipX:Float = 0;
+		var clipY:Float = 0;
+		var clipWidth:Float = frameWidth;
+		var clipHeight:Float = frameHeight;
 
 		if (myStrum.downScroll)
 		{
 			if (y - offset.y * scale.y + height >= center)
 			{
-				swagRect.height = (center - y) / scale.y;
-				swagRect.y = frameHeight - swagRect.height;
-				swagRect.width = frameWidth;
+				clipHeight = (center - y) / scale.y;
+				clipY = frameHeight - clipHeight;
 			}
 		}
 		else if (y + offset.y * scale.y <= center)
 		{
-			swagRect.y = (center - y) / scale.y;
-			swagRect.height = (height / scale.y) - swagRect.y;
-			swagRect.width = width / scale.x;
+			clipY = (center - y) / scale.y;
+			clipHeight = (height / scale.y) - clipY;
+			clipWidth = width / scale.x;
 		}
 
-		// Bypass accessor + directly update _frame like the Codename approach
+		// frame.clipTo() is relatively expensive. Skip it when this sustain's
+		// frame and effective clip rectangle are identical to the previous frame.
+		if (clipCacheValid && clipCacheFrame == currentFrame && clipCacheX == clipX &&
+			clipCacheY == clipY && clipCacheWidth == clipWidth && clipCacheHeight == clipHeight)
+			return;
+
+		if (clipRect == null)
+		{
+			@:bypassAccessor clipRect = FlxRect.get(clipX, clipY, clipWidth, clipHeight);
+		}
+		else
+		{
+			clipRect.x = clipX;
+			clipRect.y = clipY;
+			clipRect.width = clipWidth;
+			clipRect.height = clipHeight;
+		}
+
+		final swagRect:FlxRect = clipRect;
 		@:bypassAccessor clipRect = swagRect;
-		@:privateAccess if (frame != null && _frame != null)
-			_frame = frame.clipTo(swagRect, _frame);
+		@:privateAccess if (_frame != null)
+			_frame = currentFrame.clipTo(swagRect, _frame);
 		dirty = true;
+
+		clipCacheFrame = currentFrame;
+		clipCacheX = clipX;
+		clipCacheY = clipY;
+		clipCacheWidth = clipWidth;
+		clipCacheHeight = clipHeight;
+		clipCacheValid = true;
 	}
 
 	@:noCompletion
 	override function set_clipRect(rect:FlxRect):FlxRect {
+		clipCacheValid = false;
 		@:bypassAccessor clipRect = rect;
 
 		@:privateAccess if (frame != null) {
