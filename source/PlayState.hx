@@ -4828,23 +4828,25 @@ class PlayState extends MusicBeatState
 		// A blocked lane or active bot-energy input makes every candidate invalid.
 		// Check it once instead of repeating the same branch for every active note.
 		if (!usingBotEnergy && !strumsBlocked[key])
-		for (candidate in notes.members)
 		{
-			if (candidate == null || !candidate.exists || candidate.noteData != key ||
-				!candidate.canBeHit || !candidate.mustPress || candidate.tooLate || candidate.wasGoodHit ||
-				candidate.blockHit || candidate.isSustainNote) continue;
+			for (candidate in notes.members)
+			{
+				if (candidate == null || !candidate.exists || candidate.noteData != key ||
+					!candidate.canBeHit || !candidate.mustPress || candidate.tooLate || candidate.wasGoodHit ||
+					candidate.blockHit || candidate.isSustainNote) continue;
 
-			hitCount++;
-			if (firstNote == null || (firstNote.lowPriority && !candidate.lowPriority) ||
-				(firstNote.lowPriority == candidate.lowPriority && candidate.strumTime < firstNote.strumTime))
-			{
-				secondNote = firstNote;
-				firstNote = candidate;
-			}
-			else if (secondNote == null || (secondNote.lowPriority && !candidate.lowPriority) ||
-				(secondNote.lowPriority == candidate.lowPriority && candidate.strumTime < secondNote.strumTime))
-			{
-				secondNote = candidate;
+				hitCount++;
+				if (firstNote == null || (firstNote.lowPriority && !candidate.lowPriority) ||
+					(firstNote.lowPriority == candidate.lowPriority && candidate.strumTime < firstNote.strumTime))
+				{
+					secondNote = firstNote;
+					firstNote = candidate;
+				}
+				else if (secondNote == null || (secondNote.lowPriority && !candidate.lowPriority) ||
+					(secondNote.lowPriority == candidate.lowPriority && candidate.strumTime < secondNote.strumTime))
+				{
+					secondNote = candidate;
+				}
 			}
 		}
 
