@@ -3431,7 +3431,7 @@ class PlayState extends MusicBeatState
 				// on every frame; lane order remains stable between repairs.
 				final sortOrder:Int = ClientPrefs.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING;
 				final totalNotes:Int = noteLength + sustainLength;
-				final sortInterval:Int = totalNotes > 400 ? 4 : 1;
+				final sortInterval:Int = totalNotes > 2000 ? 8 : (totalNotes > 400 ? 4 : 1);
 				noteSortFrame++;
 				if (noteSortFrame >= sortInterval)
 				{
