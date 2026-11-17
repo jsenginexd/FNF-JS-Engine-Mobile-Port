@@ -150,12 +150,7 @@ class Conductor
 			else high = mid - 1;
 		}
 		bpmStepIndex = found;
-		return found >= 0 ? bpmChangeMap[found] : {
-			stepTime: 0,
-			songTime: 0,
-			bpm: bpm,
-			stepCrochet: stepCrochet
-		};
+		return found >= 0 ? bpmChangeMap[found] : baseBPMEvent;
 	}
 
 	public static function beatToSeconds(beat:Float): Float{
