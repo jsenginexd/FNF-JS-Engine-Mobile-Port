@@ -36,6 +36,15 @@ class Conductor
 	public inline static function secsToRow(sex:Float):Int
 		return Math.round(getBeat(sex) * ROWS_PER_BEAT);
 
+	// Reuse the no-change fallback event instead of allocating an anonymous object
+	// every time a chart without BPM changes asks for its active BPM.
+	private static var baseBPMEvent:BPMChangeEvent = {
+		stepTime: 0,
+		songTime: 0,
+		bpm: bpm,
+		stepCrochet: stepCrochet
+	};
+
 	public static var bpmChangeMap:Array<BPMChangeEvent> = [];
 	// Cached BPM-map cursors make the common forward-playback lookup O(1).
 	// Binary search remains the fallback for seeks and out-of-order queries.
@@ -106,12 +115,7 @@ class Conductor
 			else high = mid - 1;
 		}
 		bpmTimeIndex = found;
-		return found >= 0 ? bpmChangeMap[found] : {
-			stepTime: 0,
-			songTime: 0,
-			bpm: bpm,
-			stepCrochet: stepCrochet
-		};
+		return found >= 0 ? bpmChangeMap[found] : baseBPMEvent;
 	}
 
 	public static function getBPMFromStep(step:Float):BPMChangeEvent
@@ -182,6 +186,8 @@ class Conductor
 	{
 		bpmChangeMap = [];
 		bpmTimeIndex = bpmStepIndex = -1;
+		baseBPMEvent.bpm = bpm;
+		baseBPMEvent.stepCrochet = stepCrochet;
 
 		var curBPM:Float = song.bpm;
 		var totalSteps:Int = 0;
@@ -225,6 +231,8 @@ class Conductor
 
 		crochet = calculateCrochet(bpm);
 		stepCrochet = crochet / 4;
+		baseBPMEvent.bpm = bpm;
+		baseBPMEvent.stepCrochet = stepCrochet;
 	}
 }
 
