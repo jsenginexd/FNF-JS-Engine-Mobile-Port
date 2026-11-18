@@ -359,12 +359,25 @@ class ClientPrefs { //default settings if it can't find a save file containing y
 			FlxG.save.data.mobileSpeedPresetV1 = true;
 			FlxG.save.flush();
 		}
-		// preset V2: cap the notes that are alive on screen at once (the rest are still counted/hit, just not drawn)
+		// preset V2 used to cap visible notes at 250. That silently hid dense-chart notes
+		// on mobile, so preserve the user's unlimited-note default instead.
 		if (FlxG.save.data.mobileSpeedPresetV2 != true)
 		{
-			maxNotes = 250;
-			FlxG.save.data.maxNotes = 250;
+			if (maxNotes == 250) maxNotes = 0;
+			FlxG.save.data.maxNotes = maxNotes;
 			FlxG.save.data.mobileSpeedPresetV2 = true;
+			FlxG.save.flush();
+		}
+		// Migrate installs that already received the old V2 cap. Only undo the exact
+		// forced value; keep any different cap the player deliberately selected.
+		if (FlxG.save.data.mobileSpeedPresetV3 != true)
+		{
+			if (maxNotes == 250)
+			{
+				maxNotes = 0;
+				FlxG.save.data.maxNotes = 0;
+			}
+			FlxG.save.data.mobileSpeedPresetV3 = true;
 			FlxG.save.flush();
 		}
 		// the touch hitbox is read through Controls like a gamepad, never through keyboard events
