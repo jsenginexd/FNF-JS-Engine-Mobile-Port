@@ -3022,23 +3022,38 @@ class PlayState extends MusicBeatState
 		if (mobile.MobileControls.instance != null)
 			mobile.MobileControls.instance.cutsceneMode = inCutscene;
 		#end
-		grpCrossFade.update(elapsed);
-		grpCrossFade.forEachDead(function(img:CrossFade)
+		// Empty crossfade groups are common during gameplay. Skip both the group
+		// traversal and dead-member callback allocation until there is work to do.
+		if (grpCrossFade.length > 0)
 		{
-			grpCrossFade.remove(img, true);
-		});
+					grpCrossFade.update(elapsed);
+				grpCrossFade.forEachDead(function(img:CrossFade)
+				{
+					grpCrossFade.remove(img, true);
+				});
+		}
 
-		grpGFCrossFade.update(elapsed);
-		grpGFCrossFade.forEachDead(function(img:CrossFade)
+		// Empty crossfade groups are common during gameplay. Skip both the group
+		// traversal and dead-member callback allocation until there is work to do.
+		if (grpGFCrossFade.length > 0)
 		{
-			grpGFCrossFade.remove(img, true);
-		});
+					grpGFCrossFade.update(elapsed);
+				grpGFCrossFade.forEachDead(function(img:CrossFade)
+				{
+					grpGFCrossFade.remove(img, true);
+				});
+		}
 
-		grpBFCrossFade.update(elapsed);
-		grpBFCrossFade.forEachDead(function(img:CrossFade)
+		// Empty crossfade groups are common during gameplay. Skip both the group
+		// traversal and dead-member callback allocation until there is work to do.
+		if (grpBFCrossFade.length > 0)
 		{
-			grpBFCrossFade.remove(img, true);
-		});
+					grpBFCrossFade.update(elapsed);
+				grpBFCrossFade.forEachDead(function(img:CrossFade)
+				{
+					grpBFCrossFade.remove(img, true);
+				});
+		}
 
 		if (ffmpegMode) elapsed = 1 / ClientPrefs.targetFPS;
 		if (screenshader.enabled)
