@@ -46,7 +46,9 @@ env:
   APK_NAME: JS-Android.apk
 
 concurrency:
-  group: android-build
+  # Keep PR validation and branch-push validation independent; otherwise the
+  # two events for the same head cancel each other before Android compilation.
+  group: android-build-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
