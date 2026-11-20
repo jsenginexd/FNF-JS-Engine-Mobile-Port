@@ -381,16 +381,18 @@ class ClientPrefs { //default settings if it can't find a save file containing y
 			FlxG.save.flush();
 		}
 
-		// V4: the general "Shaders" switch does not disable the per-note RGB
-		// shader. Disable that separate path on mobile to avoid one shader
-		// reference per note/receptor and reduce shader switches while drawing.
-		if (FlxG.save.data.mobileSpeedPresetV4 != true)
+		// V4 used to disable note RGB on mobile. That made the receptors and notes
+		// lose their intended lane colours, so stop forcing that visual downgrade.
+		// V5 restores the engine's default shader setting once for installs that
+		// already received the old V4 migration.
+		if (FlxG.save.data.mobileSpeedPresetV5 != true)
 		{
-			enableColorShader = false;
-			FlxG.save.data.enableColorShader = false;
-			FlxG.save.data.mobileSpeedPresetV4 = true;
+			enableColorShader = true;
+			FlxG.save.data.enableColorShader = true;
+			FlxG.save.data.mobileSpeedPresetV5 = true;
 			FlxG.save.flush();
 		}
+
 		// the touch hitbox is read through Controls like a gamepad, never through keyboard events
 		controllerMode = true;
 		#end
