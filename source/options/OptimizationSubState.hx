@@ -55,7 +55,7 @@ class OptimizationSubState extends BaseOptionsMenu
       'bool', false);
     addOption(option);
 
-    final option:Option = new Option('Even LESS Botplay Lag', "Reduce Botplay lag even further.", 'lessBotLag', 'bool', false);
+    final option:Option = new Option('Even LESS Botplay Lag', "On mobile this is enabled by default. Skips rating popups and sustain splashes during BotPlay to reduce per-note visual work.", 'lessBotLag', 'bool', #if mobile true #else false #end);
     addOption(option);
 
     final option:Option = new Option('Max Rendered Notes: ', "The max amount of notes that the game can render onscreen.\nTo remove this limit, set it to 0.",
