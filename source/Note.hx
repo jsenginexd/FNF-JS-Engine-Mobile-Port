@@ -81,6 +81,7 @@ class Note extends FlxSprite
 	public var tooLate:Bool = false;
 	public var wasGoodHit:Bool = false;
 	public var inKillQueue:Bool = false; // already waiting in PlayState.killNotes
+	public var countsTowardLimit:Bool = false; // included in PlayState.limitNC
 	public var ignoreNote:Bool = false;
 	public var hitByOpponent:Bool = false; //For Opponent notes
 
@@ -157,6 +158,42 @@ class Note extends FlxSprite
 	public var noMissAnimation:Bool = false;
 	public var hitCausesMiss:Bool = false;
 	public var distance:Float = 2000; //plan on doing scroll directions soon -bb
+
+	// Sustain notes keep the same hitbox dimensions for many frames. Avoid rebuilding
+	// the Flixel hitbox unless the scale or current animation frame actually changes.
+	private var hitboxCacheValid:Bool = false;
+	private var hitboxScaleX:Float = 0;
+	private var hitboxScaleY:Float = 0;
+	private var hitboxFrameWidth:Float = 0;
+	private var hitboxFrameHeight:Float = 0;
+
+	// Sustain animations usually remain unchanged for hundreds of frames.
+	// Cache the current animation object so we do not run endsWith() for every note every frame.
+	private var cachedSustainAnim:Dynamic = null;
+	private var cachedSustainIsEnd:Bool = false;
+
+	// Cache the last clipping rectangle. Most sustain notes are not crossing a receptor,
+	// so repeatedly clipping an unchanged full frame is wasted CPU work.
+	private var clipCacheValid:Bool = false;
+	private var clipCacheFrame:Dynamic = null;
+	private var clipCacheX:Float = 0;
+	private var clipCacheY:Float = 0;
+	private var clipCacheWidth:Float = 0;
+	private var clipCacheHeight:Float = 0;
+
+	private inline function updateHitboxIfNeeded():Void
+	{
+		if (!hitboxCacheValid || hitboxScaleX != scale.x || hitboxScaleY != scale.y ||
+			hitboxFrameWidth != frameWidth || hitboxFrameHeight != frameHeight)
+		{
+			updateHitbox();
+			hitboxScaleX = scale.x;
+			hitboxScaleY = scale.y;
+			hitboxFrameWidth = frameWidth;
+			hitboxFrameHeight = frameHeight;
+			hitboxCacheValid = true;
+		}
+	}
 
 	public var hitsoundDisabled:Bool = false;
 
@@ -429,7 +466,8 @@ class Note extends FlxSprite
 
 	override function update(elapsed:Float)
 	{
-		if (Main.isPlayState() && PlayState.instance.cpuControlled) return;
+		// Avoid reflection-based class-name checks in this per-note, per-frame path.
+		if (PlayState.instance != null && FlxG.state == PlayState.instance && PlayState.instance.cpuControlled) return;
 
 		super.update(elapsed);
 
@@ -464,32 +502,57 @@ class Note extends FlxSprite
 	{
 		if (isSustainNote)
 		{
-			flipY = strum.downScroll;
-			scale.set(0.7, animation != null && animation.curAnim != null && animation.curAnim.name.endsWith('end') ? 1 : Conductor.stepCrochet * 0.0105 * (songSpeed * multSpeed) * sustainScale);
+			if (flipY != strum.downScroll) flipY = strum.downScroll;
 
-			if (PlayState.isPixelStage)
+			final curAnim = animation == null ? null : animation.curAnim;
+			if (cachedSustainAnim != curAnim)
 			{
-				scale.y *= PlayState.daPixelZoom * 1.20;
-				scale.x *= PlayState.daPixelZoom;
+				cachedSustainAnim = curAnim;
+				cachedSustainIsEnd = curAnim != null && curAnim.name.endsWith('end');
 			}
-			updateHitbox();
+
+			var sustainScaleY:Float = cachedSustainIsEnd ? 1 : Conductor.stepCrochet * 0.0105 * (songSpeed * multSpeed) * sustainScale;
+			if (PlayState.isPixelStage) sustainScaleY *= PlayState.daPixelZoom * 1.20;
+
+			// copyScaleX overwrites X below, so do not write a temporary 0.7 value.
+			// Avoid dirtying the scale point when the sustain dimensions are unchanged.
+			if (copyScaleX)
+			{
+				if (scale.y != sustainScaleY) scale.y = sustainScaleY;
+			}
+			else
+			{
+				final sustainScaleX:Float = PlayState.isPixelStage ? PlayState.daPixelZoom * 0.7 : 0.7;
+				if (scale.x != sustainScaleX || scale.y != sustainScaleY)
+					scale.set(sustainScaleX, sustainScaleY);
+			}
+
+			// copyScaleX refreshes the hitbox after applying the receptor scale below.
+			// Avoid doing the same hitbox work twice for every sustain note each frame.
+			if (!copyScaleX) updateHitboxIfNeeded();
 		}
 
 		distance = (0.45 * (Conductor.songPosition - strumTime) * songSpeed * multSpeed);
 		if (!ClientPrefs.downScroll) distance *= -1;
 
 		if (copyAngle)
-			angle = strum.direction - 90 + strum.angle + offsetAngle;
+		{
+			final targetAngle:Float = strum.direction - 90 + strum.angle + offsetAngle;
+			if (angle != targetAngle) angle = targetAngle;
+		}
 
-		if(copyAlpha)
-			alpha = strum.alpha * multAlpha;
+		if (copyAlpha)
+		{
+			final targetAlpha:Float = strum.alpha * multAlpha;
+			if (alpha != targetAlpha) alpha = targetAlpha;
+		}
 
 		if(copyX)
-			x = strum.x + offsetX + Math.cos(strum.direction * Math.PI / 180) * distance;
+			x = strum.x + offsetX + strum.directionCos * distance;
 
 		if(copyY)
 		{
-			y = strum.y + offsetY + (!isSustainNote || strum.downScroll ? 0 : 55) + Math.sin(strum.direction * Math.PI / 180) * distance;
+			y = strum.y + offsetY + (!isSustainNote || strum.downScroll ? 0 : 55) + strum.directionSin * distance;
 			if(strum.downScroll && isSustainNote)
 			{
 				if(PlayState.isPixelStage)
@@ -500,51 +563,98 @@ class Note extends FlxSprite
 			}
 		}
 
-		if(copyScaleX)
+		if (copyScaleX)
 		{
-			scale.x = strum.scale.x;
-			if (isSustainNote) updateHitbox();
+			final targetScaleX:Float = strum.scale.x;
+			if (scale.x != targetScaleX) scale.x = targetScaleX;
+			if (isSustainNote) updateHitboxIfNeeded();
 		}
-		if(copyScaleY && !isSustainNote)
+		if (copyScaleY && !isSustainNote)
 		{
-			scale.y = strum.scale.y;
+			final targetScaleY:Float = strum.scale.y;
+			if (scale.y != targetScaleY) scale.y = targetScaleY;
 		}
 	}
 
 	public function clipToStrumNote(myStrum:StrumNote)
 	{
-		final center:Float = myStrum.y + offsetY + Note.swagWidth / 2;
 		if (!isSustainNote || (!mustPress && ignoreNote) ||
 			(mustPress && !wasGoodHit && canBeHit)) return;
 
-		if (clipRect == null) clipRect = FlxRect.get(0, 0, frameWidth, frameHeight);
-		final swagRect = clipRect;
+		final currentFrame:Dynamic = frame;
+		if (currentFrame == null) return;
+		@:privateAccess if (_frame == null) return;
+
+		final center:Float = myStrum.y + offsetY + Note.swagWidth / 2;
+		var clipX:Float = 0;
+		var clipY:Float = 0;
+		var clipWidth:Float = frameWidth;
+		var clipHeight:Float = frameHeight;
 
 		if (myStrum.downScroll)
 		{
 			if (y - offset.y * scale.y + height >= center)
 			{
-				swagRect.height = (center - y) / scale.y;
-				swagRect.y = frameHeight - swagRect.height;
-				swagRect.width = frameWidth;
+				clipHeight = (center - y) / scale.y;
+				clipY = frameHeight - clipHeight;
 			}
 		}
 		else if (y + offset.y * scale.y <= center)
 		{
-			swagRect.y = (center - y) / scale.y;
-			swagRect.height = (height / scale.y) - swagRect.y;
-			swagRect.width = width / scale.x;
+			clipY = (center - y) / scale.y;
+			clipHeight = (height / scale.y) - clipY;
+			clipWidth = width / scale.x;
 		}
 
-		// Bypass accessor + directly update _frame like the Codename approach
+		// A sustain that has not reached the receptor needs no clipping at all.
+		// Keep the full-frame state cached without allocating a FlxRect or clipped frame.
+		if (clipRect == null && clipX == 0 && clipY == 0 &&
+			clipWidth == frameWidth && clipHeight == frameHeight)
+		{
+			clipCacheFrame = currentFrame;
+			clipCacheX = clipX;
+			clipCacheY = clipY;
+			clipCacheWidth = clipWidth;
+			clipCacheHeight = clipHeight;
+			clipCacheValid = true;
+			return;
+		}
+
+		// frame.clipTo() is relatively expensive. Skip it when this sustain's
+		// frame and effective clip rectangle are identical to the previous frame.
+		if (clipCacheValid && clipCacheFrame == currentFrame && clipCacheX == clipX &&
+			clipCacheY == clipY && clipCacheWidth == clipWidth && clipCacheHeight == clipHeight)
+			return;
+
+		if (clipRect == null)
+		{
+			@:bypassAccessor clipRect = FlxRect.get(clipX, clipY, clipWidth, clipHeight);
+		}
+		else
+		{
+			clipRect.x = clipX;
+			clipRect.y = clipY;
+			clipRect.width = clipWidth;
+			clipRect.height = clipHeight;
+		}
+
+		final swagRect:FlxRect = clipRect;
 		@:bypassAccessor clipRect = swagRect;
-		@:privateAccess if (frame != null && _frame != null)
-			_frame = frame.clipTo(swagRect, _frame);
+		@:privateAccess if (_frame != null)
+			_frame = currentFrame.clipTo(swagRect, _frame);
 		dirty = true;
+
+		clipCacheFrame = currentFrame;
+		clipCacheX = clipX;
+		clipCacheY = clipY;
+		clipCacheWidth = clipWidth;
+		clipCacheHeight = clipHeight;
+		clipCacheValid = true;
 	}
 
 	@:noCompletion
 	override function set_clipRect(rect:FlxRect):FlxRect {
+		clipCacheValid = false;
 		@:bypassAccessor clipRect = rect;
 
 		@:privateAccess if (frame != null) {

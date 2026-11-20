@@ -9,7 +9,28 @@ class StrumNote extends FlxSprite
 	public var notes_angle:Null<Float> = null;
 	public var resetAnim:Float = 0;
 	public var noteData:Int = 0;
-	public var direction:Float = 90;//plan on doing scroll directions soon -bb
+	public var direction(default, set):Float = 90;//plan on doing scroll directions soon -bb
+	public var directionCos:Float = 0;
+	public var directionSin:Float = 1;
+	private var cachedDirection:Float = 90;
+	private var directionCacheValid:Bool = true;
+
+	// Recalculate trigonometry only when a receptor's direction actually changes,
+	// rather than checking the cache once for every note that follows this receptor.
+	function set_direction(value:Float):Float
+	{
+		if (!directionCacheValid || cachedDirection != value)
+		{
+			direction = value;
+			cachedDirection = value;
+			final radians:Float = value * Math.PI / 180;
+			directionCos = Math.cos(radians);
+			directionSin = Math.sin(radians);
+			directionCacheValid = true;
+		}
+		return value;
+	}
+
 	public var downScroll:Bool = false;//plan on doing scroll directions soon -bb
 	public var sustainReduce:Bool = true;
 
@@ -31,19 +52,26 @@ class StrumNote extends FlxSprite
 	}
 
 	public function new(x:Float, y:Float, leData:Int, player:Int, ?inEditor:Bool = false) {
-		rgbShader = new RGBShaderReference(this, Note.initializeGlobalRGBShader(leData));
-		rgbShader.enabled = false;
-		if(PlayState.SONG != null && PlayState.SONG.disableNoteRGB || !ClientPrefs.enableColorShader) useRGBShader = false;
-
-		var arr:Array<FlxColor> = ClientPrefs.arrowRGB[leData];
-		if(PlayState.isPixelStage) arr = ClientPrefs.arrowRGBPixel[leData];
-		if(arr != null && leData <= arr.length && useRGBShader)
+		// Do not construct a shader reference at all when mobile performance
+		// settings disable note RGB. A null shader is safe: all use sites below
+		// are guarded by useRGBShader or an explicit null check.
+		useRGBShader = ClientPrefs.enableColorShader &&
+			(PlayState.SONG == null || !PlayState.SONG.disableNoteRGB);
+		if (useRGBShader)
 		{
-			@:bypassAccessor
+			rgbShader = new RGBShaderReference(this, Note.initializeGlobalRGBShader(leData));
+			rgbShader.enabled = false;
+
+			var arr:Array<FlxColor> = ClientPrefs.arrowRGB[leData];
+			if(PlayState.isPixelStage) arr = ClientPrefs.arrowRGBPixel[leData];
+			if(arr != null && leData <= arr.length)
 			{
-				rgbShader.r = arr[0];
-				rgbShader.g = arr[1];
-				rgbShader.b = arr[2];
+				@:bypassAccessor
+				{
+					rgbShader.r = arr[0];
+					rgbShader.g = arr[1];
+					rgbShader.b = arr[2];
+				}
 			}
 		}
 		noteData = leData;
