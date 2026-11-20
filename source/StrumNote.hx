@@ -52,19 +52,26 @@ class StrumNote extends FlxSprite
 	}
 
 	public function new(x:Float, y:Float, leData:Int, player:Int, ?inEditor:Bool = false) {
-		rgbShader = new RGBShaderReference(this, Note.initializeGlobalRGBShader(leData));
-		rgbShader.enabled = false;
-		if(PlayState.SONG != null && PlayState.SONG.disableNoteRGB || !ClientPrefs.enableColorShader) useRGBShader = false;
-
-		var arr:Array<FlxColor> = ClientPrefs.arrowRGB[leData];
-		if(PlayState.isPixelStage) arr = ClientPrefs.arrowRGBPixel[leData];
-		if(arr != null && leData <= arr.length && useRGBShader)
+		// Do not construct a shader reference at all when mobile performance
+		// settings disable note RGB. A null shader is safe: all use sites below
+		// are guarded by useRGBShader or an explicit null check.
+		useRGBShader = ClientPrefs.enableColorShader &&
+			(PlayState.SONG == null || !PlayState.SONG.disableNoteRGB);
+		if (useRGBShader)
 		{
-			@:bypassAccessor
+			rgbShader = new RGBShaderReference(this, Note.initializeGlobalRGBShader(leData));
+			rgbShader.enabled = false;
+
+			var arr:Array<FlxColor> = ClientPrefs.arrowRGB[leData];
+			if(PlayState.isPixelStage) arr = ClientPrefs.arrowRGBPixel[leData];
+			if(arr != null && leData <= arr.length)
 			{
-				rgbShader.r = arr[0];
-				rgbShader.g = arr[1];
-				rgbShader.b = arr[2];
+				@:bypassAccessor
+				{
+					rgbShader.r = arr[0];
+					rgbShader.g = arr[1];
+					rgbShader.b = arr[2];
+				}
 			}
 		}
 		noteData = leData;
