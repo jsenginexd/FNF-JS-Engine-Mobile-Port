@@ -1057,12 +1057,20 @@ class PlayState extends MusicBeatState
 		energyBarBG.cameras = energyBar.cameras = energyTxt.cameras = [camHUD];
 
 		sustainNotes = new FlxTypedGroup<Note>();
+		#if mobile
+		// Note updates are dispatched through a direct array walk after super.update.
+		// Keep the group drawable/recyclable but skip FlxTypedGroup's callback pass.
+		sustainNotes.active = false;
+		#end
 		add(sustainNotes);
 
 		strumLineNotes = new FlxTypedGroup<StrumNote>();
 		add(strumLineNotes);
 
 		notes = new FlxTypedGroup<Note>();
+		#if mobile
+		notes.active = false;
+		#end
 		add(notes);
 		notes.visible = sustainNotes.visible = ClientPrefs.showNotes; //that was easier than expected
 
@@ -3133,6 +3141,18 @@ class PlayState extends MusicBeatState
 
 		callOnLuas('onUpdate', [elapsed]);
 		super.update(elapsed);
+
+		#if mobile
+		// Note.update normally runs through FlxTypedGroup.update. The groups are
+		// inactive on mobile to avoid that generic callback traversal; reproduce
+		// the same alive/active checks with tight indexed loops instead. Botplay's
+		// Note.update exits immediately, so skip the entire pass while cpuControlled.
+		if (!cpuControlled)
+		{
+			updateMobileNoteGroup(sustainNotes, elapsed);
+			updateMobileNoteGroup(notes, elapsed);
+		}
+		#end
 
 		if (tankmanAscend && curStep > 895 && curStep < 1151) camGame.zoom = 0.8;
 
@@ -5373,6 +5393,22 @@ class PlayState extends MusicBeatState
 			}
 		}
 	}
+
+	#if mobile
+	private inline function updateMobileNoteGroup(group:FlxTypedGroup<Note>, elapsed:Float):Void
+	{
+		final members:Array<Note> = group.members;
+		final length:Int = group.length;
+		var i:Int = 0;
+		while (i < length)
+		{
+			final note:Note = members[i];
+			if (note != null && note.exists && note.alive && note.active)
+				note.update(elapsed);
+			i++;
+		}
+	}
+	#end
 
 	function updateNote(daNote:Note):Void
 	{
