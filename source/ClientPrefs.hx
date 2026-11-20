@@ -380,6 +380,17 @@ class ClientPrefs { //default settings if it can't find a save file containing y
 			FlxG.save.data.mobileSpeedPresetV3 = true;
 			FlxG.save.flush();
 		}
+
+		// V4: the general "Shaders" switch does not disable the per-note RGB
+		// shader. Disable that separate path on mobile to avoid one shader
+		// reference per note/receptor and reduce shader switches while drawing.
+		if (FlxG.save.data.mobileSpeedPresetV4 != true)
+		{
+			enableColorShader = false;
+			FlxG.save.data.enableColorShader = false;
+			FlxG.save.data.mobileSpeedPresetV4 = true;
+			FlxG.save.flush();
+		}
 		// the touch hitbox is read through Controls like a gamepad, never through keyboard events
 		controllerMode = true;
 		#end
