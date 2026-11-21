@@ -270,6 +270,9 @@ class PlayState extends MusicBeatState
 	public var cameraSpeed:Float = 1;
 	var hitsoundImage:FlxSprite;
 	var hitsoundImageToLoad:String;
+	var hitsoundImageChecked:Bool = false;
+	var hitsoundImageShared:Bool = false;
+	var hitsoundImageMod:Bool = false;
 
 	//ok moxie this doesn't cause memory leaks
 	public var scoreTxtUpdateFrame:Int = 0;
@@ -5160,7 +5163,8 @@ class PlayState extends MusicBeatState
 			//notesAddedCount = 0;
 			NOTE_SPAWN_TIME = (ClientPrefs.dynamicSpawnTime ? (1600 / songSpeed) : 1600 * ClientPrefs.noteSpawnTime);
 			targetNote = unspawnNotes[notesAddedCount];
-			limitNC = (notes.countLiving() + sustainNotes.countLiving());
+			// counting every living note each frame is O(n); with no note limit (noteLimit == 0 becomes max int) the count is never used
+			limitNC = (noteLimit != 2147483647 ? (notes.countLiving() + sustainNotes.countLiving()) : 0);
 
 			if (targetNote != null && !targetNote.wasHit)
 			{
@@ -5261,7 +5265,14 @@ class PlayState extends MusicBeatState
 			{
 				hitsound.play(true);
 				hitsound.pitch = playbackRate;
-				if (FileSystem.exists('assets/shared/images/' + hitsoundImageToLoad + '.png') || FileSystem.exists(Paths.modFolders('images/' + hitsoundImageToLoad + '.png')) && hitImagesFrame < 4)
+				// disk lookups on every hit are very slow on phones, so check once and remember the result
+				if (!hitsoundImageChecked)
+				{
+					hitsoundImageChecked = true;
+					hitsoundImageShared = FileSystem.exists('assets/shared/images/' + hitsoundImageToLoad + '.png');
+					hitsoundImageMod = FileSystem.exists(Paths.modFolders('images/' + hitsoundImageToLoad + '.png'));
+				}
+				if (hitsoundImageShared || hitsoundImageMod && hitImagesFrame < 4)
 				{
 					hitImagesFrame++;
 					hitsoundImage = new FlxSprite().loadGraphic(Paths.image(hitsoundImageToLoad));
