@@ -352,7 +352,6 @@ jobs:
           key: cache-android-build-${{ github.sha }}
 
       - name: Upload APK artifact
-        if: ${{ github.event_name != 'pull_request' }}
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
