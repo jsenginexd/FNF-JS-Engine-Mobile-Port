@@ -5488,19 +5488,21 @@ class PlayState extends MusicBeatState
 					if ((hitsoundImageShared || hitsoundImageMod) && hitImagesFrame < 4)
 					{
 						hitImagesFrame++;
-						hitsoundImage = new FlxSprite().loadGraphic(Paths.image(hitsoundImageToLoad));
-						hitsoundImage.antialiasing = ClientPrefs.globalAntialiasing;
-						hitsoundImage.scrollFactor.set();
-						hitsoundImage.setGraphicSize(Std.int(hitsoundImage.width / FlxG.camera.zoom));
-						hitsoundImage.updateHitbox();
-						hitsoundImage.screenCenter();
-						hitsoundImage.alpha = 1;
-						hitsoundImage.cameras = [camGame];
-						add(hitsoundImage);
-						FlxTween.tween(hitsoundImage, {alpha: 0}, 1 / (SONG.bpm/100) / playbackRate, {
+						final hitImage:FlxSprite = new FlxSprite().loadGraphic(Paths.image(hitsoundImageToLoad));
+						hitsoundImage = hitImage;
+						hitImage.antialiasing = ClientPrefs.globalAntialiasing;
+						hitImage.scrollFactor.set();
+						hitImage.setGraphicSize(Std.int(hitImage.width / FlxG.camera.zoom));
+						hitImage.updateHitbox();
+						hitImage.screenCenter();
+						hitImage.alpha = 1;
+						hitImage.cameras = [camGame];
+						add(hitImage);
+						FlxTween.tween(hitImage, {alpha: 0}, 1 / (SONG.bpm/100) / playbackRate, {
 							onComplete: function(tween:FlxTween)
 							{
-								hitsoundImage.destroy();
+								remove(hitImage, true);
+								hitImage.destroy();
 							}
 						});
 					}
