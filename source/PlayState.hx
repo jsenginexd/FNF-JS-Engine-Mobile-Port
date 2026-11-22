@@ -5652,13 +5652,6 @@ class PlayState extends MusicBeatState
 			}
 		}
 
-		if (SONG.needsVoices && !ffmpegMode)
-		{
-			if (!opponentChart && opponentVocals != null && opponentVocals.volume != 1)
-				opponentVocals.volume = 1;
-			else if (vocals.volume != 1)
-				vocals.volume = 1;
-		}
 		return refreshScore;
 	}
 
@@ -5675,6 +5668,15 @@ class PlayState extends MusicBeatState
 			{
 				batchSkips = true; // when thousands of notes are skipped in one frame only the last sing animation per side is shown
 				final fastBotSkip:Bool = canFastSkipBotNotes();
+				// All callback-free skipped hits in this batch share the same vocal
+				// routing. Restore volume once, rather than testing it for every note.
+				if (fastBotSkip && SONG.needsVoices && !ffmpegMode)
+				{
+					if (!opponentChart && opponentVocals != null && opponentVocals.volume != 1)
+						opponentVocals.volume = 1;
+					else if (vocals.volume != 1)
+						vocals.volume = 1;
+				}
 				var refreshScoreAfterFastSkips:Int = 0;
 				final skipProfileStart:Float = ClientPrefs.showRendered ? haxe.Timer.stamp() : 0;
 				// BotPlay's callback-free fast path must keep up with very dense charts.
