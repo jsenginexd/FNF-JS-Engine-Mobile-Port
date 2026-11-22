@@ -91,6 +91,7 @@ jobs:
             ~/.gradle/caches/
             ~/.gradle/wrapper/
             ~/.hxcpp_cache/
+            ~/.cache/hxpkg/
           key: cache-android-build-${{ github.sha }}
           restore-keys: cache-android-build-
 
@@ -99,9 +100,16 @@ jobs:
           haxelib setup ~/haxelib
           haxelib install hxcpp > /dev/null --quiet
           haxelib install hxpkg --quiet
-          # hxpkg requires --force when the restored project-local .haxelib
-          # links already exist; keep this deterministic instead of failing CI.
-          haxelib run hxpkg install --force
+          # Avoid force-reinstalling every linked Git dependency on every PR.
+          # The stamp is tied to .hxpkg, so dependency changes still trigger install.
+          HXP_STAMP="$HOME/.cache/hxpkg/install-${{ hashFiles('.hxpkg') }}"
+          if [ -f "$HXP_STAMP" ] && [ -d .haxelib/lime/git ] && [ -d .haxelib/openfl/git ] && [ -d .haxelib/hxcpp/git ]; then
+            echo "Reusing restored Haxe dependency tree"
+          else
+            haxelib run hxpkg install --force
+            mkdir -p "$(dirname "$HXP_STAMP")"
+            touch "$HXP_STAMP"
+          fi
 
       # hxcpp's content-addressed cache reuses object files for unchanged Haxe
       # generated C++ and native dependencies across PR commits. Cache keys are
@@ -194,6 +202,9 @@ jobs:
 
       - name: Build APK (armv7 + arm64)
         timeout-minutes: 150
+        env:
+          # Explicit worker count for the hosted runner's four compile cores.
+          HXCPP_COMPILE_THREADS: 4
         run: |
           rm -f assets/preload/gameRenders/renderlol.bat
           # hxcpp can hang forever after a C++ compile error, so watch the log and stop at the first one
@@ -272,6 +283,7 @@ jobs:
             ~/.gradle/caches/
             ~/.gradle/wrapper/
             ~/.hxcpp_cache/
+            ~/.cache/hxpkg/
           key: cache-android-build-${{ github.sha }}
 
       - name: Upload APK artifact
