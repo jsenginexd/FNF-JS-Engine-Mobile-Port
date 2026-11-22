@@ -2591,7 +2591,6 @@ class PlayState extends MusicBeatState
 					final noteTypeName:Dynamic = noteTypeIsString ? rawNoteType : ChartingState.noteTypeList[rawNoteType];
 					final normalAnimSuffix:String = (altAnimationNote || section.altAnim) ? '-alt' : '';
 					final noteAnimSuffix:String = (normalAnimSuffix != '' || (noteTypeIsBool && rawNoteType == true)) ? '-alt' : '';
-					final noteSkinName:String = gottaHitNote ? bfNoteskin : dadNoteskin;
 					var daNoteData:Int = 0;
 					if (!assignedFirstData && oneK)
 					{
@@ -2624,6 +2623,7 @@ class PlayState extends MusicBeatState
 					}
 
 					gottaHitNote = (!opponentChart ? songNotes[1] < 4 : songNotes[1] > 3) ? section.mustHitSection : !section.mustHitSection;
+					final noteSkinName:String = gottaHitNote ? bfNoteskin : dadNoteskin;
 
 					if ((bothSides || gottaHitNote) && songNotes[3] != 'Hurt Note') {
 						totalNotes += 1;
