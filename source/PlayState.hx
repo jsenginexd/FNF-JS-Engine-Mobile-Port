@@ -3136,12 +3136,17 @@ class PlayState extends MusicBeatState
 			}
 		}
 
-		if (botEnergy > 0.2 && botEnergy < 1.8) energyBar.color = energyTxt.color = 0xFF0094FF;
-		if (botEnergy < 0.2) energyBar.color = energyTxt.color = 0xFFC60000;
-		if (botEnergy > 1.8) energyBar.color = energyTxt.color = 0xFF00BC12;
+		// Avoid regenerating the HUD text bitmap and dirtying display properties
+		// every frame when Bot Energy is unchanged.
+		final energyColor:FlxColor = botEnergy > 1.8 ? 0xFF00BC12 : (botEnergy < 0.2 ? 0xFFC60000 : 0xFF0094FF);
+		if (energyBar.color != energyColor) energyBar.color = energyColor;
+		if (energyTxt.color != energyColor) energyTxt.color = energyColor;
 
-		energyTxt.text = (botEnergy < 2 ? FlxMath.roundDecimal(botEnergy * 50, 0) + '%' : 'Full');
-		energyTxt.y = (FlxG.height / 1.3) - (botEnergy * 50 * 4);
+		final energyText:String = botEnergy < 2 ? FlxMath.roundDecimal(botEnergy * 50, 0) + '%' : 'Full';
+		if (energyTxt.text != energyText) energyTxt.text = energyText;
+
+		final energyY:Float = (FlxG.height / 1.3) - (botEnergy * 50 * 4);
+		if (energyTxt.y != energyY) energyTxt.y = energyY;
 
 		#if LUA_ALLOWED
 		if (luaArray.length > 0) callOnLuas('onUpdate', [elapsed]);
