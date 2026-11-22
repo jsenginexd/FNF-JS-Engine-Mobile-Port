@@ -648,6 +648,11 @@ class PlayState extends MusicBeatState
 		else
 			grpBFCrossFade = new FlxTypedGroup<CrossFade>(1); // limit
 
+		// These groups are updated manually in PlayState.update so their
+		// empty member arrays are not traversed by the normal state update.
+		grpCrossFade.active = false;
+		grpGFCrossFade.active = false;
+		grpBFCrossFade.active = false;
 		add(grpCrossFade);
 		add(grpGFCrossFade);
 		add(grpBFCrossFade);
@@ -3026,6 +3031,27 @@ class PlayState extends MusicBeatState
 	var energyDrainSpeed:Float = 1;
 	var energyRefillSpeed:Float = 1;
 
+	private inline function updateCrossFadeGroup(group:FlxTypedGroup<CrossFade>, elapsed:Float):Void
+	{
+		if (group.length > 0)
+		{
+			group.active = true;
+			group.update(elapsed);
+
+			// Remove dead members with a reverse indexed pass, avoiding a closure
+			// allocation and keeping splice-based removal safe.
+			final members:Array<CrossFade> = group.members;
+			var i:Int = members.length - 1;
+			while (i >= 0)
+			{
+				final item:CrossFade = members[i];
+				if (item != null && !item.alive) group.remove(item, true);
+				i--;
+			}
+		}
+		group.active = false;
+	}
+
 	override public function update(elapsed:Float)
 	{
 		#if mobile
@@ -3033,38 +3059,11 @@ class PlayState extends MusicBeatState
 		if (mobile.MobileControls.instance != null)
 			mobile.MobileControls.instance.cutsceneMode = inCutscene;
 		#end
-		// Empty crossfade groups are common during gameplay. Skip both the group
-		// traversal and dead-member callback allocation until there is work to do.
-		if (grpCrossFade.length > 0)
-		{
-			grpCrossFade.update(elapsed);
-			grpCrossFade.forEachDead(function(img:CrossFade)
-			{
-				grpCrossFade.remove(img, true);
-			});
-		}
-
-		// Empty crossfade groups are common during gameplay. Skip both the group
-		// traversal and dead-member callback allocation until there is work to do.
-		if (grpGFCrossFade.length > 0)
-		{
-			grpGFCrossFade.update(elapsed);
-			grpGFCrossFade.forEachDead(function(img:CrossFade)
-			{
-				grpGFCrossFade.remove(img, true);
-			});
-		}
-
-		// Empty crossfade groups are common during gameplay. Skip both the group
-		// traversal and dead-member callback allocation until there is work to do.
-		if (grpBFCrossFade.length > 0)
-		{
-			grpBFCrossFade.update(elapsed);
-			grpBFCrossFade.forEachDead(function(img:CrossFade)
-			{
-				grpBFCrossFade.remove(img, true);
-			});
-		}
+		// Update each CrossFade group exactly once. They are inactive as children,
+		// so super.update below will not traverse or update them a second time.
+		updateCrossFadeGroup(grpCrossFade, elapsed);
+		updateCrossFadeGroup(grpGFCrossFade, elapsed);
+		updateCrossFadeGroup(grpBFCrossFade, elapsed);
 
 		if (ffmpegMode) elapsed = 1 / ClientPrefs.targetFPS;
 		if (screenshader.enabled)
