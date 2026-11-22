@@ -226,8 +226,11 @@ class PlayState extends MusicBeatState
 	var charChangeTimes:Array<Float> = [];
 	var charChangeNames:Array<String> = [];
 	var charChangeTypes:Array<Int> = [];
+	// Cursors avoid Array.shift(), which moves all remaining entries per event.
+	var charChangeIndex:Int = 0;
 
 	var multiChangeEvents:Array<Array<Float>> = [[], []];
+	var multiChangeIndex:Int = 0;
 
 	//Gameplay settings
 	public var healthGain:Float = 1;
@@ -2426,6 +2429,9 @@ class PlayState extends MusicBeatState
 	private function generateSong(?startingPoint:Float = 0):Void
 	{
 		var offsetStart = (startingPoint > 0 ? 500 : 0);
+		final chartStartTime:Float = startingPoint + offsetStart;
+		charChangeIndex = 0;
+		multiChangeIndex = 0;
 		final startTime = haxe.Timer.stamp();
 
 		songSpeedType = ClientPrefs.getGameplaySetting('scrolltype','multiplicative');
@@ -2494,14 +2500,14 @@ class PlayState extends MusicBeatState
 			{
 				for (i in 0...event[1].length)
 				{
-					if (event[0] >= startingPoint + offsetStart)
+					if (event[0] >= chartStartTime)
 					{
-						var newEventNote:Array<Dynamic> = [event[0], event[1][i][0], event[1][i][1], event[1][i][2]];
+						final eventValues = event[1][i];
 						var subEvent:EventNote = {
-							strumTime: newEventNote[0] + ClientPrefs.noteOffset,
-							event: newEventNote[1],
-							value1: newEventNote[2],
-							value2: newEventNote[3]
+							strumTime: event[0] + ClientPrefs.noteOffset,
+							event: eventValues[0],
+							value1: eventValues[1],
+							value2: eventValues[2]
 						};
 						eventNotes.push(subEvent);
 						eventPushed(subEvent);
@@ -2513,14 +2519,14 @@ class PlayState extends MusicBeatState
 		{
 			for (i in 0...event[1].length)
 			{
-				if (event[0] >= startingPoint + offsetStart)
+				if (event[0] >= chartStartTime)
 				{
-					var newEventNote:Array<Dynamic> = [event[0], event[1][i][0], event[1][i][1], event[1][i][2]];
+					final eventValues = event[1][i];
 					var subEvent:EventNote = {
-						strumTime: newEventNote[0] + ClientPrefs.noteOffset,
-						event: newEventNote[1],
-						value1: newEventNote[2],
-						value2: newEventNote[3]
+						strumTime: event[0] + ClientPrefs.noteOffset,
+						event: eventValues[0],
+						value1: eventValues[1],
+						value2: eventValues[2]
 					};
 					eventNotes.push(subEvent);
 					eventPushed(subEvent);
@@ -2548,7 +2554,7 @@ class PlayState extends MusicBeatState
 				if (songNotes[1] == -1)
 					continue;
 
-				if (songNotes[0] >= startingPoint + offsetStart) {
+				if (songNotes[0] >= chartStartTime) {
 					final daStrumTime:Float = songNotes[0];
 					var daNoteData:Int = 0;
 					if (!assignedFirstData && oneK)
@@ -2590,27 +2596,24 @@ class PlayState extends MusicBeatState
 						opponentNoteTotal += 1;
 					}
 
-					if (daStrumTime >= charChangeTimes[0])
+					while (charChangeIndex < charChangeTimes.length && daStrumTime >= charChangeTimes[charChangeIndex])
 					{
-						switch (charChangeTypes[0])
+						switch (charChangeTypes[charChangeIndex])
 						{
 							case 0:
-								var boyfriendToGrab:Boyfriend = boyfriendMap.get(charChangeNames[0]);
+								var boyfriendToGrab:Boyfriend = boyfriendMap.get(charChangeNames[charChangeIndex]);
 								if (boyfriendToGrab != null) bfNoteskin = boyfriendToGrab.noteskin;
 							case 1:
-								var dadToGrab:Character = dadMap.get(charChangeNames[0]);
+								var dadToGrab:Character = dadMap.get(charChangeNames[charChangeIndex]);
 								if (dadToGrab != null) dadNoteskin = dadToGrab.noteskin;
 						}
-						charChangeTimes.shift();
-						charChangeNames.shift();
-						charChangeTypes.shift();
+						charChangeIndex++;
 					}
 
-					if (multiChangeEvents[0].length > 0 && daStrumTime >= multiChangeEvents[0][0])
+					while (multiChangeIndex < multiChangeEvents[0].length && daStrumTime >= multiChangeEvents[0][multiChangeIndex])
 					{
-						currentMultiplier = multiChangeEvents[1][0];
-						multiChangeEvents[0].shift();
-						multiChangeEvents[1].shift();
+						currentMultiplier = multiChangeEvents[1][multiChangeIndex];
+						multiChangeIndex++;
 					}
 
 					swagNote = {
@@ -2746,7 +2749,11 @@ class PlayState extends MusicBeatState
 
 		final endTime = haxe.Timer.stamp();
 
+		// A forced full collection here pauses the chart transition after all data
+		// is prepared. Mobile can reclaim temporary parser data incrementally.
+		#if !mobile
 		System.gc();
+		#end
 
 		final elapsedTime = endTime - startTime;
 
