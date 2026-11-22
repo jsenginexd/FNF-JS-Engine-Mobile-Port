@@ -127,6 +127,10 @@ class PlayState extends MusicBeatState
 	public var notes:FlxTypedGroup<Note>;
 	public var sustainNotes:FlxTypedGroup<Note>;
 	public var killNotes:Array<Note> = [];
+	// O(1) free lists replace FlxTypedGroup.recycle(), which linearly scans
+	// every member and becomes quadratic during dense chart spawn bursts.
+	private var freeNotes:Array<Note> = [];
+	private var freeSustainNotes:Array<Note> = [];
 	public var unspawnNotes:Array<PreloadedChartNote> = [];
 	public var eventNotes:Array<EventNote> = [];
 
@@ -4657,11 +4661,21 @@ class PlayState extends MusicBeatState
 			if (group != null){
 				while (group.length > 0) {
 					final note:Note = group.members[0];
-					if (note != null) note.countsTowardLimit = false;
+					if (note != null)
+					{
+						note.countsTowardLimit = false;
+						note.inNoteGroup = false;
+						note.inFreeNotePool = false;
+						note.kill();
+					}
 					group.remove(note, true);
 				}
 			}
 		}
+		// Notes removed by a seek/loop are no longer group members. Drop their
+		// old pool entries; queued kills can safely repopulate the lists later.
+		freeNotes.resize(0);
+		freeSustainNotes.resize(0);
 		//unspawnNotes = [];
 		//eventNotes = [];
 	}
@@ -5440,6 +5454,33 @@ class PlayState extends MusicBeatState
 		}
 	}
 
+	private inline function recycleChartNote(isSustain:Bool):Note
+	{
+		final group:FlxTypedGroup<Note> = isSustain ? sustainNotes : notes;
+		final pool:Array<Note> = isSustain ? freeSustainNotes : freeNotes;
+		var note:Note;
+
+		if (pool.length > 0)
+		{
+			note = pool.pop();
+			note.inFreeNotePool = false;
+			note.revive();
+		}
+		else
+		{
+			note = new Note();
+		}
+
+		// KillNotes() removes group members during seeks/loops. Re-add pooled
+		// notes only when necessary; normal gameplay keeps them in their group.
+		if (!note.inNoteGroup)
+		{
+			group.add(note);
+			note.inNoteGroup = true;
+		}
+		return note;
+	}
+
 	function spawnNotes()
 	{
 		if (unspawnNotes[notesAddedCount] != null)
@@ -5486,7 +5527,7 @@ class PlayState extends MusicBeatState
 				// limitNC is maintained as notes are spawned and destroyed. Avoid
 				// countLiving() here: it scans every active note on every spawn-window frame.
 				while (limitNC < noteLimit && targetNote.strumTime - Conductor.songPosition < (NOTE_SPAWN_TIME / targetNote.multSpeed)) {
-					spawnedNote = (targetNote.isSustainNote ? sustainNotes : notes).recycle(Note);
+					spawnedNote = recycleChartNote(targetNote.isSustainNote);
 					spawnedNote.setupNoteData(targetNote);
 					spawnedNote.countsTowardLimit = true;
 
@@ -6032,6 +6073,11 @@ class PlayState extends MusicBeatState
 				if (limitNC > 0) limitNC--;
 			}
 			noteKill.kill();
+			if (!noteKill.inFreeNotePool)
+			{
+				noteKill.inFreeNotePool = true;
+				(noteKill.isSustainNote ? freeSustainNotes : freeNotes).push(noteKill);
+			}
 		}
 		killNotes.resize(0);
 	}
