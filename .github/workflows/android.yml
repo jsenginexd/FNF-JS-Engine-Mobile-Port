@@ -118,6 +118,9 @@ jobs:
           done
 
           HXCPP_PATH="$(haxelib libpath hxcpp 2>/dev/null | tail -n 1)"
+          # haxelib libpath prints a trailing slash; normalize it before matching
+          # the repository fork path, or every cache hit is falsely rejected.
+          HXCPP_PATH="${HXCPP_PATH%/}"
           case "$HXCPP_PATH" in
             */.haxelib/hxcpp/git) ;;
             *) echo "Cached hxcpp fork is not selected: $HXCPP_PATH"; CACHE_OK=0 ;;
