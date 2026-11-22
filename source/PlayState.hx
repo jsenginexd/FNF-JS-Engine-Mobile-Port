@@ -5474,31 +5474,37 @@ class PlayState extends MusicBeatState
 			{
 				hitsound.play(true);
 				hitsound.pitch = playbackRate;
-				// disk lookups on every hit are very slow on phones, so check once and remember the result
-				if (!hitsoundImageChecked)
+
+				// Keep the audio hit, but avoid allocating a sprite, tween and completion
+				// closure for every BotPlay hit when the mobile low-lag preset is active.
+				if (!cpuControlled || !ClientPrefs.lessBotLag)
 				{
-					hitsoundImageChecked = true;
-					hitsoundImageShared = FileSystem.exists('assets/shared/images/' + hitsoundImageToLoad + '.png');
-					hitsoundImageMod = FileSystem.exists(Paths.modFolders('images/' + hitsoundImageToLoad + '.png'));
-				}
-				if ((hitsoundImageShared || hitsoundImageMod) && hitImagesFrame < 4)
-				{
-					hitImagesFrame++;
-					hitsoundImage = new FlxSprite().loadGraphic(Paths.image(hitsoundImageToLoad));
-					hitsoundImage.antialiasing = ClientPrefs.globalAntialiasing;
-					hitsoundImage.scrollFactor.set();
-					hitsoundImage.setGraphicSize(Std.int(hitsoundImage.width / FlxG.camera.zoom));
-					hitsoundImage.updateHitbox();
-					hitsoundImage.screenCenter();
-					hitsoundImage.alpha = 1;
-					hitsoundImage.cameras = [camGame];
-					add(hitsoundImage);
-					FlxTween.tween(hitsoundImage, {alpha: 0}, 1 / (SONG.bpm/100) / playbackRate, {
-						onComplete: function(tween:FlxTween)
-						{
-							hitsoundImage.destroy();
-						}
-					});
+					// Check disk only once; the cached result is valid for this PlayState.
+					if (!hitsoundImageChecked)
+					{
+						hitsoundImageChecked = true;
+						hitsoundImageShared = FileSystem.exists('assets/shared/images/' + hitsoundImageToLoad + '.png');
+						hitsoundImageMod = FileSystem.exists(Paths.modFolders('images/' + hitsoundImageToLoad + '.png'));
+					}
+					if ((hitsoundImageShared || hitsoundImageMod) && hitImagesFrame < 4)
+					{
+						hitImagesFrame++;
+						hitsoundImage = new FlxSprite().loadGraphic(Paths.image(hitsoundImageToLoad));
+						hitsoundImage.antialiasing = ClientPrefs.globalAntialiasing;
+						hitsoundImage.scrollFactor.set();
+						hitsoundImage.setGraphicSize(Std.int(hitsoundImage.width / FlxG.camera.zoom));
+						hitsoundImage.updateHitbox();
+						hitsoundImage.screenCenter();
+						hitsoundImage.alpha = 1;
+						hitsoundImage.cameras = [camGame];
+						add(hitsoundImage);
+						FlxTween.tween(hitsoundImage, {alpha: 0}, 1 / (SONG.bpm/100) / playbackRate, {
+							onComplete: function(tween:FlxTween)
+							{
+								hitsoundImage.destroy();
+							}
+						});
+					}
 				}
 			}
 
@@ -5787,7 +5793,7 @@ class PlayState extends MusicBeatState
 				invalidateNote(daNote);
 			}
 
-			if(ClientPrefs.oppNoteSplashes && !daNote.isSustainNote && splashesPerFrame[0] <= 4)
+			if(ClientPrefs.oppNoteSplashes && (!cpuControlled || !ClientPrefs.lessBotLag) && !daNote.isSustainNote && splashesPerFrame[0] <= 4)
 				spawnNoteSplashOnNote(true, daNote);
 
 			if (SONG.needsVoices && !ffmpegMode)
@@ -5809,7 +5815,7 @@ class PlayState extends MusicBeatState
 			}
 			daNote.hitByOpponent = true;
 
-			if (ClientPrefs.oppNoteSplashes && daNote.isSustainNote && splashesPerFrame[2] <= 4) spawnHoldSplashOnNote(daNote, true);
+			if (ClientPrefs.oppNoteSplashes && (!cpuControlled || !ClientPrefs.lessBotLag) && daNote.isSustainNote && splashesPerFrame[2] <= 4) spawnHoldSplashOnNote(daNote, true);
 
 			if (!ClientPrefs.noHitFuncs)
 			{
