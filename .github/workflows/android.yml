@@ -90,6 +90,7 @@ jobs:
             build/release/android/obj/
             ~/.gradle/caches/
             ~/.gradle/wrapper/
+            ~/.hxcpp_cache/
           key: cache-android-build-${{ github.sha }}
           restore-keys: cache-android-build-
 
@@ -101,6 +102,20 @@ jobs:
           # Reuse the restored dependency tree instead of reinstalling
           # every linked package on each incremental build.
           haxelib run hxpkg install
+
+      # hxcpp's content-addressed cache reuses object files for unchanged Haxe
+      # generated C++ and native dependencies across PR commits. Cache keys are
+      # derived internally from source, dependencies, compiler and flags.
+      - name: Configure hxcpp shared compile cache
+        run: |
+          mkdir -p "$HOME/.hxcpp_cache"
+          cat > "$HOME/.hxcpp_config.xml" <<EOF
+          <xml>
+            <set name="HXCPP_COMPILE_CACHE" value="$HOME/.hxcpp_cache" />
+            <set name="HXCPP_CACHE_MB" value="4096" />
+          </xml>
+          EOF
+          cat "$HOME/.hxcpp_config.xml"
 
       - name: Compile hxcpp tools
         run: |
@@ -132,8 +147,8 @@ jobs:
           open(p, 'w').write(s)
           PY
           grep -n "emutls" -B2 -A3 "$TC"
-          # cached 32-bit libraries were linked the old way: drop them so they are linked again from the cached objects
-          find .haxelib/lime/git/ndll/Android build/release/android -name '*-v7.so' -print -delete 2>/dev/null || true
+          # Keep the restored libraries: they were built with this same static
+          # emutls fix, and deleting them forces a native relink on every PR.
 
       - name: Configure Lime for Android
         run: |
@@ -146,8 +161,13 @@ jobs:
       - name: Rebuild Lime native libraries (armv7 + arm64)
         timeout-minutes: 60
         run: |
-          haxelib run lime rebuild android -arm64 -release
-          ls -la .haxelib/lime/git/ndll/Android/
+          LIME_NDLL=.haxelib/lime/git/ndll/Android
+          if [ -s "$LIME_NDLL/liblime-v7.so" ] && [ -s "$LIME_NDLL/liblime-64.so" ]; then
+            echo "Using restored armv7 + arm64 Lime native libraries"
+          else
+            haxelib run lime rebuild android -arm64 -release
+          fi
+          ls -la "$LIME_NDLL"
 
       # The APK must be signed or Android refuses to install it.
       # Add the repository secrets ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS to keep the SAME
@@ -251,6 +271,7 @@ jobs:
             build/release/android/obj/
             ~/.gradle/caches/
             ~/.gradle/wrapper/
+            ~/.hxcpp_cache/
           key: cache-android-build-${{ github.sha }}
 
       - name: Upload APK artifact
