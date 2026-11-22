@@ -1429,7 +1429,7 @@ class PlayState extends MusicBeatState
 		if(eventNotes.length > 1)
 		{
 			for (event in eventNotes) event.strumTime -= eventNoteEarlyTrigger(event);
-			eventNotes.sort(sortByTime);
+			if (!eventNotesAreSorted()) eventNotes.sort(sortByTime);
 		}
 
 		// SONG SPECIFIC SCRIPTS
@@ -2762,8 +2762,8 @@ class PlayState extends MusicBeatState
 				}
 		}
 		// trace('["${SONG.song.toUpperCase()}" CHART INFO]: Ghost Notes Cleared: $ghostNotesCleared');
-		unspawnNotes.sort(sortByTime);
-		eventNotes.sort(sortByTime);
+		if (!chartNotesAreSorted()) unspawnNotes.sort(sortByTime);
+		if (!eventNotesAreSorted()) eventNotes.sort(sortByTime);
 		generatedMusic = true;
 
 		sectionsLoaded = 0;
@@ -2855,6 +2855,28 @@ class PlayState extends MusicBeatState
 				return 280; //Plays 280ms before the actual position
 		}
 		return 0;
+	}
+
+	private inline function chartNotesAreSorted():Bool
+	{
+		var i:Int = 1;
+		while (i < unspawnNotes.length)
+		{
+			if (unspawnNotes[i - 1].strumTime > unspawnNotes[i].strumTime) return false;
+			i++;
+		}
+		return true;
+	}
+
+	private inline function eventNotesAreSorted():Bool
+	{
+		var i:Int = 1;
+		while (i < eventNotes.length)
+		{
+			if (eventNotes[i - 1].strumTime > eventNotes[i].strumTime) return false;
+			i++;
+		}
+		return true;
 	}
 
 	function sortByTime(Obj1:Dynamic, Obj2:Dynamic):Int
