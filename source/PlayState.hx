@@ -5529,10 +5529,9 @@ class PlayState extends MusicBeatState
 				amountOfRenderedNotes += daNote.noteDensity;
 				if (maxRenderedNotes < amountOfRenderedNotes) maxRenderedNotes = amountOfRenderedNotes;
 			}
-			// BotPlay with note rendering disabled has no visual note work to do.
-			// Hit processing above and expiration below must still run, but receptor
-			// lookup, position updates and sustain clipping can all be skipped.
-			if (!cpuControlled || ClientPrefs.showNotes)
+			// Hidden note sprites still need hit timing and expiration, but their
+			// receptor lookup, position updates and sustain clipping are pure visual work.
+			if (ClientPrefs.showNotes)
 			{
 				final strum:StrumNote = (daNote.mustPress ? playerStrums : opponentStrums).members[daNote.noteData];
 				daNote.followStrum(strum, songSpeed);
