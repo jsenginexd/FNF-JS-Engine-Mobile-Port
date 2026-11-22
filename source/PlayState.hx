@@ -2574,14 +2574,21 @@ class PlayState extends MusicBeatState
 			{
 				final songNotes:Array<Dynamic> = section.sectionNotes[i];
 
-				if (songNotes[1] == -1)
+				// Normalize dynamic chart fields once per source note. These values
+				// are reused by note generation, ownership, sustain expansion and stats.
+				final rawStrumTime:Float = songNotes[0];
+				final rawLane:Float = songNotes[1];
+				final rawSustainLength:Float = songNotes[2];
+				final rawNoteType:Dynamic = songNotes[3];
+
+				if (rawLane == -1)
 					continue;
 
-				if (songNotes[0] >= chartStartTime) {
-					final daStrumTime:Float = songNotes[0];
+				if (rawStrumTime >= chartStartTime) {
+					final daStrumTime:Float = rawStrumTime;
 					// Resolve dynamic chart metadata once per source note. Its sustain
 					// segments and optional jack notes reuse these values.
-					final rawNoteType:Dynamic = songNotes[3];
+					final rawNoteType:Dynamic = rawNoteType;
 					final noteTypeIsString:Bool = Std.isOfType(rawNoteType, String);
 					final noteTypeIsBool:Bool = Std.isOfType(rawNoteType, Bool);
 					final hurtNote:Bool = rawNoteType == 'Hurt Note';
@@ -2594,16 +2601,16 @@ class PlayState extends MusicBeatState
 					var daNoteData:Int = 0;
 					if (!assignedFirstData && oneK)
 					{
-						firstNoteData = Std.int(songNotes[1] % 4);
+						firstNoteData = Std.int(rawLane % 4);
 						assignedFirstData = true;
 					}
-					if (!randomMode && !flip && !stairs && !waves) daNoteData = Std.int(songNotes[1] % 4);
+					if (!randomMode && !flip && !stairs && !waves) daNoteData = Std.int(rawLane % 4);
 
 					if (oneK) daNoteData = firstNoteData;
 
 					if (randomMode) daNoteData = FlxG.random.int(0, 3);
 
-					if (flip) daNoteData = Std.int(Math.abs((songNotes[1] % 4) - 3));
+					if (flip) daNoteData = Std.int(Math.abs((rawLane % 4) - 3));
 
 					if (stairs && !waves) {
 						daNoteData = stair % 4;
@@ -2622,9 +2629,9 @@ class PlayState extends MusicBeatState
 						stair++;
 					}
 
-					gottaHitNote = (!opponentChart ? songNotes[1] < 4 : songNotes[1] > 3) ? section.mustHitSection : !section.mustHitSection;
+					gottaHitNote = (!opponentChart ? rawLane < 4 : rawLane > 3) ? section.mustHitSection : !section.mustHitSection;
 
-					if ((bothSides || gottaHitNote) && songNotes[3] != 'Hurt Note') {
+					if ((bothSides || gottaHitNote) && rawNoteType != 'Hurt Note') {
 						totalNotes += 1;
 					}
 					if (!bothSides && !gottaHitNote) {
@@ -2661,10 +2668,10 @@ class PlayState extends MusicBeatState
 						noteType: noteTypeName,
 						animSuffix: noteAnimSuffix,
 						noteskin: noteSkinName,
-						gfNote: gfSingNote || (section.gfSection && songNotes[1] < 4),
+						gfNote: gfSingNote || (section.gfSection && rawLane < 4),
 						noAnimation: noAnimationNote,
 						noMissAnimation: noAnimationNote,
-						sustainLength: songNotes[2],
+						sustainLength: rawSustainLength,
 						hitHealth: 0.023,
 						missHealth: !hurtNote ? 0.0475 : 0.3,
 						wasHit: false,
@@ -2726,7 +2733,7 @@ class PlayState extends MusicBeatState
 								noteData: daNoteData,
 								mustPress: bothSides || gottaHitNote,
 								oppNote: (opponentChart ? gottaHitNote : !gottaHitNote),
-								noteType: songNotes[3],
+								noteType: rawNoteType,
 								animSuffix: normalAnimSuffix,
 								noteskin: noteSkinName,
 								gfNote: swagNote.gfNote,
@@ -2748,9 +2755,9 @@ class PlayState extends MusicBeatState
 						}
 					}
 				} else {
-					final gottaHitNote:Bool = ((songNotes[1] < 4 && !opponentChart)
-						|| (songNotes[1] > 3 && opponentChart) ? section.mustHitSection : !section.mustHitSection);
-					if ((bothSides || gottaHitNote) && songNotes[3] != 'Hurt Note') {
+					final gottaHitNote:Bool = ((rawLane < 4 && !opponentChart)
+						|| (rawLane > 3 && opponentChart) ? section.mustHitSection : !section.mustHitSection);
+					if ((bothSides || gottaHitNote) && rawNoteType != 'Hurt Note') {
 						totalNotes += 1;
 						combo += 1;
 						totalNotesPlayed += 1;
