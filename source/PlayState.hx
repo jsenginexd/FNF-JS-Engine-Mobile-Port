@@ -5149,8 +5149,8 @@ class PlayState extends MusicBeatState
 				daNote.noteHoldSplash.kill();
 			}
 
-			stagesFunc(function(stage:BaseStage) stage.noteMiss(daNote));
-			callOnLuas('noteMiss', [(daNote.isSustainNote ? sustainNotes : notes).members.indexOf(daNote), daNote.noteData, daNote.noteType, daNote.isSustainNote]);
+			if (stages.length > 0) stagesFunc(function(stage:BaseStage) stage.noteMiss(daNote));
+			callOnLuas('noteMiss', [luaNoteIndex(daNote), daNote.noteData, daNote.noteType, daNote.isSustainNote]);
 			if (ClientPrefs.missRating && ClientPrefs.ratingPopups) popUpScore(daNote, true);
 		}
 		if (daNoteAlt != null)
@@ -5388,7 +5388,7 @@ class PlayState extends MusicBeatState
 					spawnedNote.setupNoteData(targetNote);
 					spawnedNote.countsTowardLimit = true;
 
-					if (!ClientPrefs.noSpawnFunc) callOnLuas('onSpawnNote', [(!spawnedNote.isSustainNote ? notes.members.indexOf(spawnedNote) : sustainNotes.members.indexOf(spawnedNote)), targetNote.noteData, targetNote.noteType, targetNote.isSustainNote]);
+					if (!ClientPrefs.noSpawnFunc) callOnLuas('onSpawnNote', [luaNoteIndex(spawnedNote), targetNote.noteData, targetNote.noteType, targetNote.isSustainNote]);
 					notesAddedCount++; limitNC++;
 					if (unspawnNotes[notesAddedCount+1] != null) targetNote = unspawnNotes[notesAddedCount];
 					else break;
@@ -5644,8 +5644,8 @@ class PlayState extends MusicBeatState
 
 			if (!ClientPrefs.noHitFuncs)
 			{
-				callOnLuas((oppTrigger ? 'opponentNoteHit' : 'goodNoteHit'), [(note.isSustainNote ? sustainNotes : notes).members.indexOf(note), Math.abs(note.noteData), note.noteType, note.isSustainNote]);
-				stagesFunc(function(stage:BaseStage) (oppTrigger ? stage.opponentNoteHit(note) : stage.goodNoteHit(note)));
+				callOnLuas((oppTrigger ? 'opponentNoteHit' : 'goodNoteHit'), [luaNoteIndex(note), Math.abs(note.noteData), note.noteType, note.isSustainNote]);
+				if (stages.length > 0) stagesFunc(function(stage:BaseStage) (oppTrigger ? stage.opponentNoteHit(note) : stage.goodNoteHit(note)));
 			}
 
 			if (!note.isSustainNote) invalidateNote(note);
@@ -5813,8 +5813,8 @@ class PlayState extends MusicBeatState
 
 			if (!ClientPrefs.noHitFuncs)
 			{
-				callOnLuas((!opponentChart ? 'opponentNoteHit' : 'goodNoteHit'), [(daNote.isSustainNote ? sustainNotes : notes).members.indexOf(daNote), Math.abs(daNote.noteData), daNote.noteType, daNote.isSustainNote]);
-				stagesFunc(function(stage:BaseStage) (!opponentChart ? stage.opponentNoteHit(daNote) : stage.goodNoteHit(daNote)));
+				callOnLuas((!opponentChart ? 'opponentNoteHit' : 'goodNoteHit'), [luaNoteIndex(daNote), Math.abs(daNote.noteData), daNote.noteType, daNote.isSustainNote]);
+				if (stages.length > 0) stagesFunc(function(stage:BaseStage) (!opponentChart ? stage.opponentNoteHit(daNote) : stage.goodNoteHit(daNote)));
 			}
 
 			if (shouldDrainHealth && health > (healthDrainFloor * polyphonyOppo) && !practiceMode || opponentDrain && practiceMode)
@@ -6336,9 +6336,22 @@ class PlayState extends MusicBeatState
 	}
 	#end
 
+	// Index of a note inside its group, only needed by Lua callbacks. members.indexOf() scans the whole group, so with
+	// thousands of notes doing it on every hit/spawn is O(n^2); skip it when no Lua script can receive the value.
+	private inline function luaNoteIndex(note:Note):Int
+	{
+		#if LUA_ALLOWED
+		if (luaArray.length == 0) return -1;
+		return (note.isSustainNote ? sustainNotes : notes).members.indexOf(note);
+		#else
+		return -1;
+		#end
+	}
+
 	public function callOnLuas(event:String, args:Array<Dynamic> = null, ignoreStops = true, exclusions:Array<String> = null, excludeValues:Array<Dynamic> = null):Dynamic {
 		var returnVal = FunkinLua.Function_Continue;
 		#if LUA_ALLOWED
+		if (luaArray.length == 0) return returnVal; // no scripts: skip allocating the empty exclusion arrays
 		if(args == null) args = [];
 		if(exclusions == null) exclusions = [];
 		if(excludeValues == null) excludeValues = [];

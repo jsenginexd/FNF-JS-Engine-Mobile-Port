@@ -840,7 +840,9 @@ class Note extends FlxSprite
 		}
 		angle = 0;
 
-		clipRect = null;
+		// the clipRect setter re-clips the frame every time; only pay for it when a previous sustain left a clip behind
+		if (clipRect != null) clipRect = null;
+		else clipCacheValid = false;
 		if (!mustPress)
 		{
 			visible = ClientPrefs.opponentStrums;
