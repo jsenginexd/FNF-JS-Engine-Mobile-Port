@@ -2623,7 +2623,6 @@ class PlayState extends MusicBeatState
 					}
 
 					gottaHitNote = (!opponentChart ? songNotes[1] < 4 : songNotes[1] > 3) ? section.mustHitSection : !section.mustHitSection;
-					final noteSkinName:String = gottaHitNote ? bfNoteskin : dadNoteskin;
 
 					if ((bothSides || gottaHitNote) && songNotes[3] != 'Hurt Note') {
 						totalNotes += 1;
@@ -2645,6 +2644,8 @@ class PlayState extends MusicBeatState
 						}
 						charChangeIndex++;
 					}
+					// Resolve the skin after any character-change event at this time.
+					final noteSkinName:String = gottaHitNote ? bfNoteskin : dadNoteskin;
 
 					if (multiChangeIndex < multiChangeEvents[0].length && daStrumTime >= multiChangeEvents[0][multiChangeIndex])
 					{
@@ -2697,7 +2698,7 @@ class PlayState extends MusicBeatState
 								oppNote: swagNote.oppNote,
 								noteType: swagNote.noteType,
 								animSuffix: normalAnimSuffix,
-								noteskin: (gottaHitNote ? bfNoteskin : dadNoteskin),
+								noteskin: noteSkinName,
 								gfNote: swagNote.gfNote,
 								isSustainNote: false,
 								isSustainEnd: false,
@@ -2727,7 +2728,7 @@ class PlayState extends MusicBeatState
 								oppNote: (opponentChart ? gottaHitNote : !gottaHitNote),
 								noteType: songNotes[3],
 								animSuffix: normalAnimSuffix,
-								noteskin: (gottaHitNote ? bfNoteskin : dadNoteskin),
+								noteskin: noteSkinName,
 								gfNote: swagNote.gfNote,
 								noAnimation: noAnimationNote,
 								isSustainNote: true,
