@@ -2588,7 +2588,6 @@ class PlayState extends MusicBeatState
 					final daStrumTime:Float = rawStrumTime;
 					// Resolve dynamic chart metadata once per source note. Its sustain
 					// segments and optional jack notes reuse these values.
-					final rawNoteType:Dynamic = rawNoteType;
 					final noteTypeIsString:Bool = Std.isOfType(rawNoteType, String);
 					final noteTypeIsBool:Bool = Std.isOfType(rawNoteType, Bool);
 					final hurtNote:Bool = rawNoteType == 'Hurt Note';
