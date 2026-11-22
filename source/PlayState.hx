@@ -5507,6 +5507,7 @@ class PlayState extends MusicBeatState
 	private inline function fastSkipBotNote(note:PreloadedChartNote):Bool
 	{
 		final poly:Float = note.mustPress ? (opponentChart ? polyphonyOppo : polyphonyBF) : polyphonyOppo;
+		var refreshScore:Bool = false;
 
 		if (note.mustPress)
 		{
@@ -5568,7 +5569,7 @@ class PlayState extends MusicBeatState
 			{
 				if (ClientPrefs.showNPS) batchNpsOpp += poly;
 				enemyHits += poly;
-				return true;
+				refreshScore = true;
 			}
 		}
 
@@ -5579,7 +5580,7 @@ class PlayState extends MusicBeatState
 			else if (vocals.volume != 1)
 				vocals.volume = 1;
 		}
-		return false;
+		return refreshScore;
 	}
 
 	function spawnNotes()
