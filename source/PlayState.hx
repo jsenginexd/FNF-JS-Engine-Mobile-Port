@@ -2275,7 +2275,9 @@ class PlayState extends MusicBeatState
 
 		scoreTxt.text = '${tempScore}\n';
 
-		callOnLuas('onUpdateScore', [miss]);
+		#if LUA_ALLOWED
+		if (luaArray.length > 0) callOnLuas('onUpdateScore', [miss]);
+		#end
 	}
 
 	public function setSongTime(time:Float)
@@ -3141,7 +3143,9 @@ class PlayState extends MusicBeatState
 		energyTxt.text = (botEnergy < 2 ? FlxMath.roundDecimal(botEnergy * 50, 0) + '%' : 'Full');
 		energyTxt.y = (FlxG.height / 1.3) - (botEnergy * 50 * 4);
 
-		callOnLuas('onUpdate', [elapsed]);
+		#if LUA_ALLOWED
+		if (luaArray.length > 0) callOnLuas('onUpdate', [elapsed]);
+		#end
 		super.update(elapsed);
 
 		#if mobile
@@ -3556,7 +3560,9 @@ class PlayState extends MusicBeatState
 		setOnLuas('cameraX', camFollowPos.x);
 		setOnLuas('cameraY', camFollowPos.y);
 		setOnLuas('botPlay', cpuControlled);
-		callOnLuas('onUpdatePost', [elapsed]);
+		#if LUA_ALLOWED
+		if (luaArray.length > 0) callOnLuas('onUpdatePost', [elapsed]);
+		#end
 
 		if (shaderUpdates.length > 0)
 			for (i in shaderUpdates){
@@ -4927,7 +4933,9 @@ class PlayState extends MusicBeatState
 				for (i in 1...spamNotes.length) goodNoteHit(spamNotes[i]);
 		}
 		else {
-			callOnLuas('onGhostTap', [key]);
+			#if LUA_ALLOWED
+			if (luaArray.length > 0) callOnLuas('onGhostTap', [key]);
+			#end
 			if (canMiss) noteMissPress(key);
 		}
 
@@ -5149,7 +5157,9 @@ class PlayState extends MusicBeatState
 			}
 
 			if (stages.length > 0) stagesFunc(function(stage:BaseStage) stage.noteMiss(daNote));
-			callOnLuas('noteMiss', [luaNoteIndex(daNote), daNote.noteData, daNote.noteType, daNote.isSustainNote]);
+			#if LUA_ALLOWED
+			if (luaArray.length > 0) callOnLuas('noteMiss', [luaNoteIndex(daNote), daNote.noteData, daNote.noteType, daNote.isSustainNote]);
+			#end
 			if (ClientPrefs.missRating && ClientPrefs.ratingPopups) popUpScore(daNote, true);
 		}
 		if (daNoteAlt != null)
@@ -5185,7 +5195,9 @@ class PlayState extends MusicBeatState
 			}
 			if (scoreTxtUpdateFrame <= 4 && scoreTxt != null) updateScore();
 
-			callOnLuas('noteMiss', [null, daNoteAlt.noteData, daNoteAlt.noteType, daNoteAlt.isSustainNote]);
+			#if LUA_ALLOWED
+			if (luaArray.length > 0) callOnLuas('noteMiss', [null, daNoteAlt.noteData, daNoteAlt.noteType, daNoteAlt.isSustainNote]);
+			#end
 		}
 	}
 
@@ -5227,7 +5239,9 @@ class PlayState extends MusicBeatState
 		if (scoreTxtUpdateFrame <= 4 && scoreTxt != null) updateScore();
 
 		stagesFunc(function(stage:BaseStage) stage.noteMissPress(direction));
-		callOnLuas('noteMissPress', [direction]);
+		#if LUA_ALLOWED
+		if (luaArray.length > 0) callOnLuas('noteMissPress', [direction]);
+		#end
 	}
 
 	//This function handles note spawning.
@@ -5387,7 +5401,9 @@ class PlayState extends MusicBeatState
 					spawnedNote.setupNoteData(targetNote);
 					spawnedNote.countsTowardLimit = true;
 
-					if (!ClientPrefs.noSpawnFunc) callOnLuas('onSpawnNote', [luaNoteIndex(spawnedNote), targetNote.noteData, targetNote.noteType, targetNote.isSustainNote]);
+					#if LUA_ALLOWED
+				if (!ClientPrefs.noSpawnFunc && luaArray.length > 0) callOnLuas('onSpawnNote', [luaNoteIndex(spawnedNote), targetNote.noteData, targetNote.noteType, targetNote.isSustainNote]);
+				#end
 					notesAddedCount++; limitNC++;
 					if (unspawnNotes[notesAddedCount+1] != null) targetNote = unspawnNotes[notesAddedCount];
 					else break;
@@ -5651,7 +5667,9 @@ class PlayState extends MusicBeatState
 
 			if (!ClientPrefs.noHitFuncs)
 			{
-				callOnLuas((oppTrigger ? 'opponentNoteHit' : 'goodNoteHit'), [luaNoteIndex(note), Math.abs(note.noteData), note.noteType, note.isSustainNote]);
+				#if LUA_ALLOWED
+				if (luaArray.length > 0) callOnLuas((oppTrigger ? 'opponentNoteHit' : 'goodNoteHit'), [luaNoteIndex(note), Math.abs(note.noteData), note.noteType, note.isSustainNote]);
+				#end
 				if (stages.length > 0) stagesFunc(function(stage:BaseStage) (oppTrigger ? stage.opponentNoteHit(note) : stage.goodNoteHit(note)));
 			}
 
@@ -5706,7 +5724,9 @@ class PlayState extends MusicBeatState
 				}
 				if ((opponentChart ? polyphonyOppo : polyphonyBF) > 1) totalNotes += (opponentChart ? polyphonyOppo : polyphonyBF) - 1;
 			}
-			if (!ClientPrefs.noSkipFuncs) callOnLuas((oppTrigger ? 'opponentNoteSkip' : 'goodNoteSkip'), [null, Math.abs(noteAlt.noteData), noteAlt.noteType, noteAlt.isSustainNote]);
+			#if LUA_ALLOWED
+			if (!ClientPrefs.noSkipFuncs && luaArray.length > 0) callOnLuas((oppTrigger ? 'opponentNoteSkip' : 'goodNoteSkip'), [null, Math.abs(noteAlt.noteData), noteAlt.noteType, noteAlt.isSustainNote]);
+			#end
 			health += noteAlt.hitHealth * healthGain * (opponentChart ? polyphonyOppo : polyphonyBF);
 			if (!ffmpegMode)
 			{
@@ -5820,7 +5840,9 @@ class PlayState extends MusicBeatState
 
 			if (!ClientPrefs.noHitFuncs)
 			{
-				callOnLuas((!opponentChart ? 'opponentNoteHit' : 'goodNoteHit'), [luaNoteIndex(daNote), Math.abs(daNote.noteData), daNote.noteType, daNote.isSustainNote]);
+				#if LUA_ALLOWED
+				if (luaArray.length > 0) callOnLuas((!opponentChart ? 'opponentNoteHit' : 'goodNoteHit'), [luaNoteIndex(daNote), Math.abs(daNote.noteData), daNote.noteType, daNote.isSustainNote]);
+				#end
 				if (stages.length > 0) stagesFunc(function(stage:BaseStage) (!opponentChart ? stage.opponentNoteHit(daNote) : stage.goodNoteHit(daNote)));
 			}
 
@@ -5887,7 +5909,9 @@ class PlayState extends MusicBeatState
 				camGame.shake(oppChar.shakeIntensity, oppChar.shakeDuration / playbackRate);
 				camHUD.shake(oppChar.shakeIntensity / 2, oppChar.shakeDuration / playbackRate);
 			}
-			if (!ClientPrefs.noSkipFuncs) callOnLuas((!opponentChart ? 'opponentNoteSkip' : 'goodNoteSkip'), [null, Math.abs(noteAlt.noteData), noteAlt.noteType, noteAlt.isSustainNote]);
+			#if LUA_ALLOWED
+			if (!ClientPrefs.noSkipFuncs && luaArray.length > 0) callOnLuas((!opponentChart ? 'opponentNoteSkip' : 'goodNoteSkip'), [null, Math.abs(noteAlt.noteData), noteAlt.noteType, noteAlt.isSustainNote]);
+			#end
 			if (SONG.needsVoices && !ffmpegMode)
 				if (!opponentChart && opponentVocals != null && opponentVocals.volume != 1) opponentVocals.volume = 1;
 				else if (opponentChart && vocals.volume != 1 || vocals.volume != 1) vocals.volume = 1;
