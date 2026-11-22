@@ -5679,13 +5679,13 @@ class PlayState extends MusicBeatState
 				}
 				var refreshScoreAfterFastSkips:Int = 0;
 				final skipProfileStart:Float = ClientPrefs.showRendered ? haxe.Timer.stamp() : 0;
-				// BotPlay's callback-free fast path must keep up with very dense charts.
-				// 800 notes/frame fell behind on charts above ~48k notes/second at 60 FPS,
-				// so the overdue queue grew forever and later notes never reached spawning.
-				// Restore a throughput budget above 1M notes/second at 60 FPS.
-				// Callback-heavy/custom Lua paths stay bounded to protect frame pacing.
+				// Keep the same overdue-note throughput budget in both BotPlay paths.
+				// The old 400-note fallback caused a permanent backlog whenever Lua,
+				// shake effects, or custom note callbacks disabled the fast path.
+				// At 60 FPS, 20000 notes/frame allows up to 1.2M overdue notes/second.
+				// Do not silently lower this budget for charts that use callbacks.
 				#if mobile
-				final maxSkippedNotesPerFrame:Int = fastBotSkip ? 20000 : 400;
+				final maxSkippedNotesPerFrame:Int = 20000;
 				var processedSkippedNotes:Int = 0;
 				#end
 				while (targetNote.strumTime <= Conductor.songPosition - ClientPrefs.noteOffset
