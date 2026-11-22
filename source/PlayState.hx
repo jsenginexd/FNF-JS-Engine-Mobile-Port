@@ -3481,19 +3481,22 @@ class PlayState extends MusicBeatState
 				}
 				final profT3:Float = profileNotes ? haxe.Timer.stamp() : 0;
 
-				// Keep small charts perfectly ordered every frame. On dense charts,
-				// repair draw order every fourth frame instead of scanning both arrays
-				// on every frame; lane order remains stable between repairs.
-				final sortOrder:Int = ClientPrefs.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING;
-				final totalNotes:Int = noteLength + sustainLength;
-				final sortInterval:Int = totalNotes > 2000 ? 8 : (totalNotes > 400 ? 4 : 1);
-				noteSortFrame++;
-				if (noteSortFrame >= sortInterval)
+				// Draw order is irrelevant while note sprites are hidden. In BotPlay
+				// this removes the entire dense-chart sorting pass when showNotes is off.
+				if (ClientPrefs.showNotes)
 				{
-					noteSortFrame = 0;
-					if (noteLength > 1) bucketSortNotes(notes, sortOrder);
-					if (sustainLength > 1) bucketSortNotes(sustainNotes, sortOrder);
+					final sortOrder:Int = ClientPrefs.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING;
+					final totalNotes:Int = noteLength + sustainLength;
+					final sortInterval:Int = totalNotes > 2000 ? 8 : (totalNotes > 400 ? 4 : 1);
+					noteSortFrame++;
+					if (noteSortFrame >= sortInterval)
+					{
+						noteSortFrame = 0;
+						if (noteLength > 1) bucketSortNotes(notes, sortOrder);
+						if (sustainLength > 1) bucketSortNotes(sustainNotes, sortOrder);
+					}
 				}
+				else noteSortFrame = 8; // force a fresh order on the first visible frame
 				final profT4:Float = profileNotes ? haxe.Timer.stamp() : 0;
 				if (profileNotes)
 				{
