@@ -158,7 +158,8 @@ class Song
 		#if MODS_ALLOWED
 		var moddyFile:String = Paths.modsJson('$formattedFolder/$formattedSong');
 		if(FileSystem.exists(moddyFile)) {
-			rawJson = File.getContent(moddyFile).trim();
+			// Json.parse accepts surrounding whitespace; avoid allocating a full-size trimmed copy.
+			rawJson = File.getContent(moddyFile);
 		}
 		#end
 
