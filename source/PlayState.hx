@@ -3011,6 +3011,9 @@ class PlayState extends MusicBeatState
 	var limitNC = 0;
 	// Large note groups do not need a full draw-order repair on every frame.
 	var noteSortFrame:Int = 0;
+	// Reused lane buckets avoid quadratic cross-lane moves when dense charts append
+	// notes in time order but with mixed note directions.
+	var noteSortBuckets:Array<Array<Note>> = [[], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []];
 	public var amountOfRenderedNotes:Float = 0;
 	public var maxRenderedNotes:Float = 0;
 	public var skippedCount:Float = 0;
@@ -3488,8 +3491,8 @@ class PlayState extends MusicBeatState
 				if (noteSortFrame >= sortInterval)
 				{
 					noteSortFrame = 0;
-					if (noteLength > 1) insertionSortNotes(notes, sortOrder);
-					if (sustainLength > 1) insertionSortNotes(sustainNotes, sortOrder);
+					if (noteLength > 1) bucketSortNotes(notes, sortOrder);
+					if (sustainLength > 1) bucketSortNotes(sustainNotes, sortOrder);
 				}
 				final profT4:Float = profileNotes ? haxe.Timer.stamp() : 0;
 				if (profileNotes)
@@ -5331,6 +5334,74 @@ class PlayState extends MusicBeatState
 			}
 			members[j + 1] = current;
 			i++;
+		}
+	}
+
+	private function bucketSortNotes(group:FlxTypedGroup<Note>, order:Int):Void
+	{
+		final members:Array<Note> = group.members;
+		final length:Int = members.length;
+		if (length < 2) return;
+
+		final buckets:Array<Array<Note>> = noteSortBuckets;
+		var bucketIndex:Int = 0;
+		while (bucketIndex < buckets.length)
+		{
+			buckets[bucketIndex].resize(0);
+			bucketIndex++;
+		}
+
+		var nullCount:Int = 0;
+		var i:Int = 0;
+		while (i < length)
+		{
+			final note:Note = members[i];
+			if (note == null) nullCount++;
+			else
+			{
+				final lane:Int = note.noteData + (note.mustPress ? 8 : 0);
+				// Preserve support for unusual modded lane layouts outside the
+				// standard 16 buckets rather than changing their draw order.
+				if (lane < 0 || lane >= buckets.length)
+				{
+					insertionSortNotes(group, order);
+					return;
+				}
+				buckets[lane].push(note);
+			}
+			i++;
+		}
+
+		var outputIndex:Int = 0;
+		bucketIndex = 0;
+		while (bucketIndex < buckets.length)
+		{
+			final bucket:Array<Note> = buckets[bucketIndex];
+			var bucketLength:Int = bucket.length;
+			var sortIndex:Int = 1;
+			while (sortIndex < bucketLength)
+			{
+				final current:Note = bucket[sortIndex];
+				var j:Int = sortIndex - 1;
+				while (j >= 0 && (order == FlxSort.ASCENDING ? bucket[j].y > current.y : bucket[j].y < current.y))
+				{
+					bucket[j + 1] = bucket[j];
+					j--;
+				}
+				bucket[j + 1] = current;
+				sortIndex++;
+			}
+			var memberIndex:Int = 0;
+			while (memberIndex < bucketLength)
+			{
+				members[outputIndex++] = bucket[memberIndex++];
+			}
+			bucketIndex++;
+		}
+		while (nullCount > 0)
+		{
+			members[outputIndex++] = null;
+			nullCount--;
 		}
 	}
 
