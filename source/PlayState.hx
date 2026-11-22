@@ -3616,7 +3616,7 @@ class PlayState extends MusicBeatState
 
 		if (ClientPrefs.showRendered)
 		{
-			if (!ffmpegMode) renderedTxt.text = 'Rendered/Skipped: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(skippedCount)}/${formatNumber(maxRenderedNotes)}/${formatNumber(maxSkipped)}\nspawn ${Math.round(profSpawn * 10) / 10}ms | notes ${Math.round(profUpdate * 10) / 10}ms | sustain ${Math.round(profSustain * 10) / 10}ms | sort ${Math.round(profSort * 10) / 10}ms | draw ${Math.round(profDraw * 10) / 10}ms';
+			if (!ffmpegMode) renderedTxt.text = 'Rendered/Skipped: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(skippedCount)}/${formatNumber(maxRenderedNotes)}/${formatNumber(maxSkipped)}\nspawn ${Math.round(profSpawn * 10) / 10}ms (skip ${Math.round(profSkip * 10) / 10}ms) | notes ${Math.round(profUpdate * 10) / 10}ms | sustain ${Math.round(profSustain * 10) / 10}ms | sort ${Math.round(profSort * 10) / 10}ms | draw ${Math.round(profDraw * 10) / 10}ms';
 			else renderedTxt.text = 'Rendered Notes: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(maxRenderedNotes)}/${formatNumber(notes.members.length + sustainNotes.members.length)}';
 		}
 
@@ -5337,6 +5337,7 @@ class PlayState extends MusicBeatState
 	var spawnedNote:Note;
 	var profDraw:Float = 0;
 	var profSpawn:Float = 0;
+	var profSkip:Float = 0;
 	var profUpdate:Float = 0;
 	var profSustain:Float = 0;
 	var profSort:Float = 0;
@@ -5637,6 +5638,7 @@ class PlayState extends MusicBeatState
 
 	function spawnNotes()
 	{
+		profSkip = 0;
 		if (unspawnNotes[notesAddedCount] != null)
 		{
 			//notesAddedCount = 0;
@@ -5647,12 +5649,15 @@ class PlayState extends MusicBeatState
 			{
 				batchSkips = true; // when thousands of notes are skipped in one frame only the last sing animation per side is shown
 				final fastBotSkip:Bool = canFastSkipBotNotes();
-				var refreshScoreAfterFastSkips:Bool = false;
+				var refreshScoreAfterFastSkips:Int = 0;
+				final skipProfileStart:Float = ClientPrefs.showRendered ? haxe.Timer.stamp() : 0;
 				// Dense BotPlay charts can leave hundreds of thousands of overdue notes.
 				// Processing the whole backlog in one update creates a visible 100-250ms
 				// frame stall. Drain a bounded batch on mobile and continue next frame.
 				#if mobile
-				final maxSkippedNotesPerFrame:Int = fastBotSkip ? 20000 : 0x7fffffff;
+				// Keep the callback-heavy path bounded too; custom Lua/mod charts
+				// are slower per item, so use a smaller catch-up batch there.
+				final maxSkippedNotesPerFrame:Int = fastBotSkip ? 20000 : 2000;
 				var processedSkippedNotes:Int = 0;
 				#end
 				while (targetNote.strumTime <= Conductor.songPosition - ClientPrefs.noteOffset
@@ -5666,7 +5671,7 @@ class PlayState extends MusicBeatState
 					targetNote.wasHit = true;
 					if (fastBotSkip && canFastSkipBotNote(targetNote))
 					{
-						if (fastSkipBotNote(targetNote)) refreshScoreAfterFastSkips = true;
+						if (fastSkipBotNote(targetNote)) refreshScoreAfterFastSkips++;
 					}
 					else
 					{
@@ -5681,10 +5686,16 @@ class PlayState extends MusicBeatState
 						if (skippedCount > maxSkipped) maxSkipped = skippedCount;
 					}
 				}
-				// The original opponent skip path refreshed score a maximum of five
-				// times per frame. Keep that bound without refreshing once per hit.
-				if (refreshScoreAfterFastSkips)
-					while (scoreTxtUpdateFrame <= 4) updateScore();
+				// The original opponent skip path refreshed score once per eligible
+				// hit, up to five times per frame. Preserve that bound and count.
+				while (refreshScoreAfterFastSkips > 0 && scoreTxtUpdateFrame <= 4)
+				{
+					updateScore();
+					refreshScoreAfterFastSkips--;
+				}
+
+				if (ClientPrefs.showRendered)
+					profSkip = (haxe.Timer.stamp() - skipProfileStart) * 1000;
 
 				batchSkips = false;
 				flushSkipAnim(0);
@@ -5704,7 +5715,17 @@ class PlayState extends MusicBeatState
 					batchNpsOpp = 0;
 				}
 			}
-			if (ClientPrefs.showNotes || !ClientPrefs.showNotes && !cpuControlled)
+
+			// If the overdue backlog hit its per-frame budget, do not feed the
+			// same overdue notes into the normal visual spawn loop below. That
+			// would immediately recreate the original catch-up spike.
+			if (unspawnNotes[notesAddedCount] != null)
+				targetNote = unspawnNotes[notesAddedCount];
+			final overdueBacklog:Bool = targetNote != null && !targetNote.wasHit &&
+				targetNote.strumTime <= Conductor.songPosition - ClientPrefs.noteOffset;
+
+			if (!overdueBacklog && targetNote != null &&
+				(ClientPrefs.showNotes || !ClientPrefs.showNotes && !cpuControlled))
 			{
 				// limitNC is maintained as notes are spawned and destroyed. Avoid
 				// countLiving() here: it scans every active note on every spawn-window frame.
