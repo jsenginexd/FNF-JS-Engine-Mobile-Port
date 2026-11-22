@@ -14,9 +14,10 @@ on:
       - main
   # every push to main builds the APK and attaches it to the "MobilePort" release
   push:
+    # Feature-branch pushes are already validated by pull_request:synchronize.
+    # Building both events doubled CI time for every optimization commit.
     branches:
       - main
-      - perf/mobile-note-frame-cost
     tags:
       - "v*-mobile"
       - "MobilePort"
@@ -85,7 +86,10 @@ jobs:
         with:
           path: |
             .haxelib/
+            build/release/android/haxe/
             build/release/android/obj/
+            ~/.gradle/caches/
+            ~/.gradle/wrapper/
           key: cache-android-build-${{ github.sha }}
           restore-keys: cache-android-build-
 
@@ -94,7 +98,9 @@ jobs:
           haxelib setup ~/haxelib
           haxelib install hxcpp > /dev/null --quiet
           haxelib install hxpkg --quiet
-          haxelib run hxpkg install --force
+          # Reuse the restored dependency tree instead of reinstalling
+          # every linked package on each incremental build.
+          haxelib run hxpkg install
 
       - name: Compile hxcpp tools
         run: |
@@ -241,7 +247,10 @@ jobs:
         with:
           path: |
             .haxelib/
+            build/release/android/haxe/
             build/release/android/obj/
+            ~/.gradle/caches/
+            ~/.gradle/wrapper/
           key: cache-android-build-${{ github.sha }}
 
       - name: Upload APK artifact
