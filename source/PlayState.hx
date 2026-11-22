@@ -2859,7 +2859,9 @@ class PlayState extends MusicBeatState
 
 	function sortByTime(Obj1:Dynamic, Obj2:Dynamic):Int
 	{
-		return FlxSort.byValues(FlxSort.ASCENDING, Obj1.strumTime, Obj2.strumTime);
+		final timeA:Float = Obj1.strumTime;
+		final timeB:Float = Obj2.strumTime;
+		return timeA < timeB ? -1 : (timeA > timeB ? 1 : 0);
 	}
 
 	function sortByShit(Obj1:Note, Obj2:Note):Int {
@@ -4674,20 +4676,31 @@ class PlayState extends MusicBeatState
 	public function KillNotes() {
 		// All currently spawned notes are removed below.
 		limitNC = 0;
-		for (group in [notes, sustainNotes]){
-			if (group != null){
-				while (group.length > 0) {
-					final note:Note = group.members[0];
-					if (note != null)
-					{
-						note.countsTowardLimit = false;
-						note.inNoteGroup = false;
-						note.inFreeNotePool = false;
-						note.kill();
-					}
-					group.remove(note, true);
-				}
+		if (notes != null)
+		{
+			for (note in notes.members)
+			{
+				if (note == null) continue;
+				note.countsTowardLimit = false;
+				note.inNoteGroup = false;
+				note.inFreeNotePool = false;
+				note.kill();
 			}
+			// remove(note, true) searches and shifts the array for every member.
+			// One clear pass makes large seek/restart cleanups linear instead.
+			notes.clear();
+		}
+		if (sustainNotes != null)
+		{
+			for (note in sustainNotes.members)
+			{
+				if (note == null) continue;
+				note.countsTowardLimit = false;
+				note.inNoteGroup = false;
+				note.inFreeNotePool = false;
+				note.kill();
+			}
+			sustainNotes.clear();
 		}
 		// Notes removed by a seek/loop are no longer group members. Drop their
 		// old pool entries; queued kills can safely repopulate the lists later.
