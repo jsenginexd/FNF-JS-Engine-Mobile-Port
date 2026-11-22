@@ -466,8 +466,12 @@ class Note extends FlxSprite
 
 	override function update(elapsed:Float)
 	{
-		// Avoid reflection-based class-name checks in this per-note, per-frame path.
+		#if !mobile
+		// Non-mobile builds still use the generic group update path during BotPlay.
+		// Mobile PlayState dispatches Note.update manually and skips that pass entirely
+		// during BotPlay, so repeating these global state checks for every note is redundant.
 		if (PlayState.instance != null && FlxG.state == PlayState.instance && PlayState.instance.cpuControlled) return;
+		#end
 
 		super.update(elapsed);
 
