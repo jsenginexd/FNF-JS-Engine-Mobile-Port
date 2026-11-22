@@ -228,6 +228,37 @@ jobs:
           fi
           echo "KEYSTORE=$RUNNER_TEMP/sign/release.jks" >> $GITHUB_ENV
 
+      # Route Maven Central requests through Google's hosted mirror first.
+      # Sonatype can return HTTP 429 to shared GitHub-hosted runner egress IPs.
+      # Keep Maven Central as the normal fallback in the project's own repositories.
+      - name: Configure Google Maven Central mirror
+        run: |
+          mkdir -p "$HOME/.gradle/init.d"
+          cat > "$HOME/.gradle/init.d/00-google-maven-central.gradle" <<'GRADLE'
+          def centralMirror = 'https://maven-central.storage-download.googleapis.com/maven2/'
+
+          // Buildscript classpath dependencies are resolved during project setup.
+          gradle.beforeProject { project ->
+              project.buildscript.repositories.maven {
+                  name = 'GoogleHostedMavenCentral'
+                  url = uri(centralMirror)
+              }
+          }
+
+          // Plugin marker and settings-managed dependencies also use the mirror.
+          settingsEvaluated { settings ->
+              settings.pluginManagement.repositories.maven {
+                  name = 'GoogleHostedMavenCentral'
+                  url = uri(centralMirror)
+              }
+              settings.dependencyResolutionManagement.repositories.maven {
+                  name = 'GoogleHostedMavenCentral'
+                  url = uri(centralMirror)
+              }
+          }
+          GRADLE
+          cat "$HOME/.gradle/init.d/00-google-maven-central.gradle"
+
       - name: Build APK (armv7 + arm64)
         timeout-minutes: 150
         env:
