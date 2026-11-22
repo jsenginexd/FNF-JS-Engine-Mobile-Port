@@ -5481,6 +5481,107 @@ class PlayState extends MusicBeatState
 		return note;
 	}
 
+	private inline function canFastSkipBotNotes():Bool
+	{
+		if (!cpuControlled || shouldDrainHealth || opponentDrain) return false;
+		if ((boyfriend != null && boyfriend.shakeScreen) || (dad != null && dad.shakeScreen) || (gf != null && gf.shakeScreen))
+			return false;
+		#if LUA_ALLOWED
+		// Skip callbacks and score callbacks must retain their original order.
+		if (luaArray.length > 0) return false;
+		#end
+		return true;
+	}
+
+	private inline function canFastSkipBotNote(note:PreloadedChartNote):Bool
+	{
+		// These common note types have no custom skip behaviour. Keep all special
+		// note types on the original path so their exact effects are preserved.
+		return note.noteType == null || note.noteType == '' ||
+			note.noteType == 'Alt Animation' || note.noteType == 'No Animation';
+	}
+
+	// Equivalent to the two noteAlt branches of goodNoteHit/opponentNoteHit for
+	// ordinary BotPlay notes. It aggregates counters and skips repeated function
+	// dispatch while preserving the last character animation and light-strum.
+	private inline function fastSkipBotNote(note:PreloadedChartNote):Bool
+	{
+		final poly:Float = note.mustPress ? (opponentChart ? polyphonyOppo : polyphonyBF) : polyphonyOppo;
+
+		if (note.mustPress)
+		{
+			oppTrigger = opponentChart || (bothSides && note.oppNote);
+			if (!note.noAnimation && ClientPrefs.charsAndBG)
+			{
+				playerChar = !note.gfNote ? (!oppTrigger ? boyfriend : dad) : gf;
+				if (playerChar != null)
+					queueSkipAnim(1, playerChar, note.noteData, note.animSuffix);
+			}
+
+			if (!ClientPrefs.showNotes && ClientPrefs.botLightStrum)
+			{
+				final strumIndex:Int = (note.noteData % 4) + 4;
+				if (!strumsHit[strumIndex])
+				{
+					strumsHit[strumIndex] = true;
+					final strum:StrumNote = playerStrums.members[note.noteData];
+					if (strum != null)
+					{
+						strum.playAnim('confirm', true);
+						strum.resetAnim = calculateResetTime();
+					}
+				}
+			}
+
+			if (!note.isSustainNote)
+			{
+				if (combo < 0) combo = 0;
+				combo += poly;
+				songScore += (ClientPrefs.noMarvJudge ? 350 : 500) * poly;
+				totalNotesPlayed += poly;
+				if (ClientPrefs.showNPS) batchNpsGood += poly;
+				if (poly > 1) totalNotes += poly - 1;
+			}
+			health += note.hitHealth * healthGain * poly;
+		}
+		else
+		{
+			if (!note.noAnimation && ClientPrefs.charsAndBG)
+			{
+				oppChar = !note.gfNote ? (!opponentChart ? dad : boyfriend) : gf;
+				if (oppChar != null)
+					queueSkipAnim(0, oppChar, Std.int(Math.abs(note.noteData)), note.animSuffix);
+			}
+
+			if (ClientPrefs.opponentLightStrum && !strumsHit[note.noteData % 4] && !ClientPrefs.showNotes)
+			{
+				strumsHit[note.noteData % 4] = true;
+				final strum:StrumNote = opponentStrums.members[note.noteData];
+				if (strum != null)
+				{
+					strum.playAnim('confirm', true);
+					strum.resetAnim = calculateResetTime();
+				}
+			}
+
+			if (!note.isSustainNote)
+			{
+				if (ClientPrefs.showNPS) batchNpsOpp += poly;
+				enemyHits += poly;
+				return true;
+			}
+		}
+
+		if (SONG.needsVoices && !ffmpegMode)
+		{
+			if (!opponentChart && opponentVocals != null && opponentVocals.volume != 1)
+				opponentVocals.volume = 1;
+			else if (vocals.volume != 1)
+				vocals.volume = 1;
+		}
+		return false;
+	}
+
 	function spawnNotes()
 	{
 		if (unspawnNotes[notesAddedCount] != null)
@@ -5492,9 +5593,18 @@ class PlayState extends MusicBeatState
 			if (targetNote != null && !targetNote.wasHit)
 			{
 				batchSkips = true; // when thousands of notes are skipped in one frame only the last sing animation per side is shown
+				final fastBotSkip:Bool = canFastSkipBotNotes();
+				var refreshScoreAfterFastSkips:Bool = false;
 				while (targetNote.strumTime <= Conductor.songPosition - ClientPrefs.noteOffset) {
 					targetNote.wasHit = true;
-					targetNote.mustPress ? goodNoteHit(null, targetNote) : opponentNoteHit(null, targetNote);
+					if (fastBotSkip && canFastSkipBotNote(targetNote))
+					{
+						if (fastSkipBotNote(targetNote)) refreshScoreAfterFastSkips = true;
+					}
+					else
+					{
+						targetNote.mustPress ? goodNoteHit(null, targetNote) : opponentNoteHit(null, targetNote);
+					}
 					notesAddedCount++;
 					if (unspawnNotes[notesAddedCount+1] != null) targetNote = unspawnNotes[notesAddedCount];
 					else break;
@@ -5504,6 +5614,11 @@ class PlayState extends MusicBeatState
 						if (skippedCount > maxSkipped) maxSkipped = skippedCount;
 					}
 				}
+				// The original opponent skip path refreshed score a maximum of five
+				// times per frame. Keep that bound without refreshing once per hit.
+				if (refreshScoreAfterFastSkips)
+					while (scoreTxtUpdateFrame <= 4) updateScore();
+
 				batchSkips = false;
 				flushSkipAnim(0);
 				flushSkipAnim(1);
