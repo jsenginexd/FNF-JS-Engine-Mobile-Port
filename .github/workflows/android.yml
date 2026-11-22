@@ -88,6 +88,10 @@ jobs:
             .haxelib/
             build/release/android/haxe/
             build/release/android/obj/
+            build/release/android/bin/.gradle/
+            build/release/android/bin/app/build/
+            build/release/android/bin/deps/androidtools/build/
+            build/release/android/bin/deps/extension-api/build/
             ~/.gradle/caches/
             ~/.gradle/wrapper/
             ~/.hxcpp_cache/
@@ -98,12 +102,36 @@ jobs:
       - name: Install Haxe libraries
         run: |
           haxelib setup ~/haxelib
-          haxelib install hxcpp > /dev/null --quiet
           haxelib install hxpkg --quiet
-          # haxelib install hxcpp activates the registry version (4.3.2).
-          # This project intentionally uses the JS Engine hxcpp fork from .hxpkg.
-          # Re-run hxpkg so the linked Git fork is re-activated after cache restore.
-          haxelib run hxpkg install --force
+          HXP_STAMP="$HOME/.cache/hxpkg/install-${{ hashFiles('.hxpkg') }}"
+          CACHE_OK=1
+
+          # The local .haxelib repository is restored between PR builds. Verify
+          # every manifest dependency before reusing it; otherwise reinstall it.
+          for lib in lime openfl flixel flixel-addons flixel-tools flixel-ui hxp hxcpp hxvlc hscript hxcpp-debug-server flxanimate hxdiscord_rpc hxluajit funkin.vis grig.audio tjson hxnativefiledialog hxgamemode; do
+            lib_path="$(haxelib libpath "$lib" 2>/dev/null | tail -n 1)"
+            if [ -z "$lib_path" ] || [ ! -d "$lib_path" ]; then
+              echo "Missing cached Haxe dependency: $lib"
+              CACHE_OK=0
+              break
+            fi
+          done
+
+          HXCPP_PATH="$(haxelib libpath hxcpp 2>/dev/null | tail -n 1)"
+          case "$HXCPP_PATH" in
+            */.haxelib/hxcpp/git) ;;
+            *) echo "Cached hxcpp fork is not selected: $HXCPP_PATH"; CACHE_OK=0 ;;
+          esac
+
+          if [ "$CACHE_OK" -eq 1 ]; then
+            echo "Reusing verified local Haxe dependency repository"
+          else
+            echo "Refreshing Haxe dependencies from .hxpkg"
+            haxelib run hxpkg install --force
+          fi
+
+          mkdir -p "$(dirname "$HXP_STAMP")"
+          touch "$HXP_STAMP"
           echo "Resolved hxcpp library:"
           haxelib path hxcpp
           if ! haxelib path hxcpp | grep -q "/hxcpp/git"; then
@@ -111,9 +139,9 @@ jobs:
             exit 1
           fi
 
-      # hxcpp's content-addressed cache reuses object files for unchanged Haxe
-      # generated C++ and native dependencies across PR commits. Cache keys are
-      # derived internally from source, dependencies, compiler and flags.
+      # Gradle reuses task outputs/configuration, while hxcpp's content-addressed
+      # cache reuses unchanged native objects across PR commits. Cache keys inside
+      # hxcpp still include compiler versions, source hashes and compile flags.
       - name: Configure hxcpp shared compile cache
         run: |
           mkdir -p "$HOME/.hxcpp_cache"
@@ -203,8 +231,10 @@ jobs:
       - name: Build APK (armv7 + arm64)
         timeout-minutes: 150
         env:
-          # Explicit worker count for the hosted runner's four compile cores.
+          # Four hosted-runner cores; allow Gradle's independent Android tasks
+          # to run concurrently as well as hxcpp's native compilation.
           HXCPP_COMPILE_THREADS: 4
+          GRADLE_OPTS: "-Dorg.gradle.parallel=true -Dorg.gradle.caching=true -Dorg.gradle.workers.max=4"
         run: |
           rm -f assets/preload/gameRenders/renderlol.bat
           # hxcpp can hang forever after a C++ compile error, so watch the log and stop at the first one
@@ -280,6 +310,10 @@ jobs:
             .haxelib/
             build/release/android/haxe/
             build/release/android/obj/
+            build/release/android/bin/.gradle/
+            build/release/android/bin/app/build/
+            build/release/android/bin/deps/androidtools/build/
+            build/release/android/bin/deps/extension-api/build/
             ~/.gradle/caches/
             ~/.gradle/wrapper/
             ~/.hxcpp_cache/
@@ -287,6 +321,7 @@ jobs:
           key: cache-android-build-${{ github.sha }}
 
       - name: Upload APK artifact
+        if: ${{ github.event_name != 'pull_request' }}
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
