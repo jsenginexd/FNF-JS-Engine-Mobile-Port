@@ -5481,7 +5481,7 @@ class PlayState extends MusicBeatState
 					hitsoundImageShared = FileSystem.exists('assets/shared/images/' + hitsoundImageToLoad + '.png');
 					hitsoundImageMod = FileSystem.exists(Paths.modFolders('images/' + hitsoundImageToLoad + '.png'));
 				}
-				if (hitsoundImageShared || hitsoundImageMod && hitImagesFrame < 4)
+				if ((hitsoundImageShared || hitsoundImageMod) && hitImagesFrame < 4)
 				{
 					hitImagesFrame++;
 					hitsoundImage = new FlxSprite().loadGraphic(Paths.image(hitsoundImageToLoad));
