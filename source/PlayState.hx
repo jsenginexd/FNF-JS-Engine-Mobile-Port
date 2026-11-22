@@ -2857,7 +2857,7 @@ class PlayState extends MusicBeatState
 		return 0;
 	}
 
-	private inline function chartNotesAreSorted():Bool
+	private function chartNotesAreSorted():Bool
 	{
 		var i:Int = 1;
 		while (i < unspawnNotes.length)
@@ -2868,7 +2868,7 @@ class PlayState extends MusicBeatState
 		return true;
 	}
 
-	private inline function eventNotesAreSorted():Bool
+	private function eventNotesAreSorted():Bool
 	{
 		var i:Int = 1;
 		while (i < eventNotes.length)
