@@ -5626,7 +5626,21 @@ class PlayState extends MusicBeatState
 				batchSkips = true; // when thousands of notes are skipped in one frame only the last sing animation per side is shown
 				final fastBotSkip:Bool = canFastSkipBotNotes();
 				var refreshScoreAfterFastSkips:Bool = false;
-				while (targetNote.strumTime <= Conductor.songPosition - ClientPrefs.noteOffset) {
+				// Dense BotPlay charts can leave hundreds of thousands of overdue notes.
+				// Processing the whole backlog in one update creates a visible 100-250ms
+				// frame stall. Drain a bounded batch on mobile and continue next frame.
+				#if mobile
+				final maxSkippedNotesPerFrame:Int = fastBotSkip ? 20000 : 20000;
+				var processedSkippedNotes:Int = 0;
+				#end
+				while (targetNote.strumTime <= Conductor.songPosition - ClientPrefs.noteOffset
+					#if mobile
+					&& processedSkippedNotes < maxSkippedNotesPerFrame
+					#end
+				) {
+					#if mobile
+					processedSkippedNotes++;
+					#end
 					targetNote.wasHit = true;
 					if (fastBotSkip && canFastSkipBotNote(targetNote))
 					{
