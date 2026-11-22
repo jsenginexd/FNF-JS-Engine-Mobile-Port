@@ -82,6 +82,9 @@ class Note extends FlxSprite
 	public var wasGoodHit:Bool = false;
 	public var inKillQueue:Bool = false; // already waiting in PlayState.killNotes
 	public var countsTowardLimit:Bool = false; // included in PlayState.limitNC
+	// Pool bookkeeping: avoid scanning the entire FlxTypedGroup on each spawn.
+	public var inNoteGroup:Bool = false;
+	public var inFreeNotePool:Bool = false;
 	public var ignoreNote:Bool = false;
 	public var hitByOpponent:Bool = false; //For Opponent notes
 
