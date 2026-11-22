@@ -2596,7 +2596,7 @@ class PlayState extends MusicBeatState
 						opponentNoteTotal += 1;
 					}
 
-					while (charChangeIndex < charChangeTimes.length && daStrumTime >= charChangeTimes[charChangeIndex])
+					if (charChangeIndex < charChangeTimes.length && daStrumTime >= charChangeTimes[charChangeIndex])
 					{
 						switch (charChangeTypes[charChangeIndex])
 						{
@@ -2610,7 +2610,7 @@ class PlayState extends MusicBeatState
 						charChangeIndex++;
 					}
 
-					while (multiChangeIndex < multiChangeEvents[0].length && daStrumTime >= multiChangeEvents[0][multiChangeIndex])
+					if (multiChangeIndex < multiChangeEvents[0].length && daStrumTime >= multiChangeEvents[0][multiChangeIndex])
 					{
 						currentMultiplier = multiChangeEvents[1][multiChangeIndex];
 						multiChangeIndex++;
