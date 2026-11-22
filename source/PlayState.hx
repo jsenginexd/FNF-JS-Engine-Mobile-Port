@@ -5658,17 +5658,13 @@ class PlayState extends MusicBeatState
 				final fastBotSkip:Bool = canFastSkipBotNotes();
 				var refreshScoreAfterFastSkips:Int = 0;
 				final skipProfileStart:Float = ClientPrefs.showRendered ? haxe.Timer.stamp() : 0;
-				// Dense BotPlay charts can leave hundreds of thousands of overdue notes.
-				// Processing the whole backlog in one update creates a visible 100-250ms
-				// frame stall. Drain a bounded batch on mobile and continue next frame.
+				// BotPlay's callback-free fast path must keep up with very dense charts.
+				// 800 notes/frame fell behind on charts above ~48k notes/second at 60 FPS,
+				// so the overdue queue grew forever and later notes never reached spawning.
+				// Restore a throughput budget above 1M notes/second at 60 FPS.
+				// Callback-heavy/custom Lua paths stay bounded to protect frame pacing.
 				#if mobile
-				// Keep the callback-heavy path bounded too; custom Lua/mod charts
-				// are slower per item, so use a smaller catch-up batch there.
-				// Keep catch-up work below a frame-sized CPU burst on mobile.
-				// The previous 20,000-note batch could monopolize a frame for 250ms+
-				// on dense charts. Normal playback usually has far fewer overdue notes;
-				// large seek/backlog recovery now drains over several short frames.
-				final maxSkippedNotesPerFrame:Int = fastBotSkip ? 800 : 400;
+				final maxSkippedNotesPerFrame:Int = fastBotSkip ? 20000 : 400;
 				var processedSkippedNotes:Int = 0;
 				#end
 				while (targetNote.strumTime <= Conductor.songPosition - ClientPrefs.noteOffset
