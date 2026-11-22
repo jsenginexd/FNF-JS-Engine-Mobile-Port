@@ -99,9 +99,9 @@ jobs:
           haxelib setup ~/haxelib
           haxelib install hxcpp > /dev/null --quiet
           haxelib install hxpkg --quiet
-          # Reuse the restored dependency tree instead of reinstalling
-          # every linked package on each incremental build.
-          haxelib run hxpkg install
+          # hxpkg requires --force when the restored project-local .haxelib
+          # links already exist; keep this deterministic instead of failing CI.
+          haxelib run hxpkg install --force
 
       # hxcpp's content-addressed cache reuses object files for unchanged Haxe
       # generated C++ and native dependencies across PR commits. Cache keys are
