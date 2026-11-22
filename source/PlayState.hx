@@ -3562,11 +3562,14 @@ class PlayState extends MusicBeatState
 			else renderedTxt.text = 'Rendered Notes: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(maxRenderedNotes)}/${formatNumber(notes.members.length + sustainNotes.members.length)}';
 		}
 
-		setOnLuas('cameraX', camFollowPos.x);
-		setOnLuas('cameraY', camFollowPos.y);
-		setOnLuas('botPlay', cpuControlled);
 		#if LUA_ALLOWED
-		if (luaArray.length > 0) callOnLuas('onUpdatePost', [elapsed]);
+		if (luaArray.length > 0)
+		{
+			setOnLuas('cameraX', camFollowPos.x);
+			setOnLuas('cameraY', camFollowPos.y);
+			setOnLuas('botPlay', cpuControlled);
+			callOnLuas('onUpdatePost', [elapsed]);
+		}
 		#end
 
 		if (shaderUpdates.length > 0)
