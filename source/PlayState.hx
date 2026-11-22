@@ -2577,7 +2577,7 @@ class PlayState extends MusicBeatState
 				// Normalize dynamic chart fields once per source note. These values
 				// are reused by note generation, ownership, sustain expansion and stats.
 				final rawStrumTime:Float = songNotes[0];
-				final rawLane:Float = songNotes[1];
+				final rawLane:Dynamic = songNotes[1];
 				final rawSustainLength:Float = songNotes[2];
 				final rawNoteType:Dynamic = songNotes[3];
 
