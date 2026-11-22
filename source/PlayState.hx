@@ -3616,8 +3616,13 @@ class PlayState extends MusicBeatState
 
 		if (ClientPrefs.showRendered)
 		{
-			if (!ffmpegMode) renderedTxt.text = 'Rendered/Skipped: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(skippedCount)}/${formatNumber(maxRenderedNotes)}/${formatNumber(maxSkipped)}\nspawn ${Math.round(profSpawn * 10) / 10}ms (skip ${Math.round(profSkip * 10) / 10}ms) | notes ${Math.round(profUpdate * 10) / 10}ms | sustain ${Math.round(profSustain * 10) / 10}ms | sort ${Math.round(profSort * 10) / 10}ms | draw ${Math.round(profDraw * 10) / 10}ms';
-			else renderedTxt.text = 'Rendered Notes: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(maxRenderedNotes)}/${formatNumber(notes.members.length + sustainNotes.members.length)}';
+			renderedStatsTimer -= elapsed;
+			if (renderedStatsTimer <= 0)
+			{
+				renderedStatsTimer = 0.25;
+				if (!ffmpegMode) renderedTxt.text = 'Rendered/Skipped: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(skippedCount)}/${formatNumber(maxRenderedNotes)}/${formatNumber(maxSkipped)}\nspawn ${Math.round(profSpawn * 10) / 10}ms (skip ${Math.round(profSkip * 10) / 10}ms) | notes ${Math.round(profUpdate * 10) / 10}ms | sustain ${Math.round(profSustain * 10) / 10}ms | sort ${Math.round(profSort * 10) / 10}ms | draw ${Math.round(profDraw * 10) / 10}ms';
+				else renderedTxt.text = 'Rendered Notes: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(maxRenderedNotes)}/${formatNumber(notes.members.length + sustainNotes.members.length)}';
+			}
 		}
 
 		#if LUA_ALLOWED
@@ -5341,6 +5346,8 @@ class PlayState extends MusicBeatState
 	var profUpdate:Float = 0;
 	var profSustain:Float = 0;
 	var profSort:Float = 0;
+	// Throttle debug text regeneration; profiling numbers remain sampled each frame.
+	var renderedStatsTimer:Float = 0;
 	override function draw():Void
 	{
 		if (ClientPrefs.showRendered)
