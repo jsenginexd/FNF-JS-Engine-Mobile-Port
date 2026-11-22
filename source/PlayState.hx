@@ -5630,7 +5630,7 @@ class PlayState extends MusicBeatState
 				// Processing the whole backlog in one update creates a visible 100-250ms
 				// frame stall. Drain a bounded batch on mobile and continue next frame.
 				#if mobile
-				final maxSkippedNotesPerFrame:Int = fastBotSkip ? 20000 : 20000;
+				final maxSkippedNotesPerFrame:Int = fastBotSkip ? 20000 : 0x7fffffff;
 				var processedSkippedNotes:Int = 0;
 				#end
 				while (targetNote.strumTime <= Conductor.songPosition - ClientPrefs.noteOffset
