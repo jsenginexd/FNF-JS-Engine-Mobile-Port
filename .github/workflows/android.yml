@@ -100,15 +100,15 @@ jobs:
           haxelib setup ~/haxelib
           haxelib install hxcpp > /dev/null --quiet
           haxelib install hxpkg --quiet
-          # Avoid force-reinstalling every linked Git dependency on every PR.
-          # The stamp is tied to .hxpkg, so dependency changes still trigger install.
-          HXP_STAMP="$HOME/.cache/hxpkg/install-${{ hashFiles('.hxpkg') }}"
-          if [ -f "$HXP_STAMP" ] && [ -d .haxelib/lime/git ] && [ -d .haxelib/openfl/git ] && [ -d .haxelib/hxcpp/git ]; then
-            echo "Reusing restored Haxe dependency tree"
-          else
-            haxelib run hxpkg install --force
-            mkdir -p "$(dirname "$HXP_STAMP")"
-            touch "$HXP_STAMP"
+          # haxelib install hxcpp activates the registry version (4.3.2).
+          # This project intentionally uses the JS Engine hxcpp fork from .hxpkg.
+          # Re-run hxpkg so the linked Git fork is re-activated after cache restore.
+          haxelib run hxpkg install --force
+          echo "Resolved hxcpp library:"
+          haxelib path hxcpp
+          if ! haxelib path hxcpp | grep -q "/hxcpp/git"; then
+            echo "::error::Wrong hxcpp selected. Expected the repository's .haxelib/hxcpp/git fork."
+            exit 1
           fi
 
       # hxcpp's content-addressed cache reuses object files for unchanged Haxe
