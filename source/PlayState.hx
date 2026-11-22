@@ -5704,7 +5704,7 @@ class PlayState extends MusicBeatState
 						targetNote.mustPress ? goodNoteHit(null, targetNote) : opponentNoteHit(null, targetNote);
 					}
 					notesAddedCount++;
-					if (unspawnNotes[notesAddedCount+1] != null) targetNote = unspawnNotes[notesAddedCount];
+					if (unspawnNotes[notesAddedCount] != null) targetNote = unspawnNotes[notesAddedCount];
 					else break;
 					if (ClientPrefs.showRendered)
 					{
@@ -5764,7 +5764,7 @@ class PlayState extends MusicBeatState
 				if (!ClientPrefs.noSpawnFunc && luaArray.length > 0) callOnLuas('onSpawnNote', [luaNoteIndex(spawnedNote), targetNote.noteData, targetNote.noteType, targetNote.isSustainNote]);
 				#end
 					notesAddedCount++; limitNC++;
-					if (unspawnNotes[notesAddedCount+1] != null) targetNote = unspawnNotes[notesAddedCount];
+					if (unspawnNotes[notesAddedCount] != null) targetNote = unspawnNotes[notesAddedCount];
 					else break;
 				}
 			}
