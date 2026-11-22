@@ -113,6 +113,9 @@ class Note extends FlxSprite
 	public var lowPriority:Bool = false;
 
 	public static final SUSTAIN_SIZE:Int = 44;
+	// Tiny overlap between adjacent sustain body pieces hides atlas/filtering seams
+	// without turning the hold into one solid bar or changing chart timing.
+	public static final SUSTAIN_TEXTURE_OVERLAP:Float = 1.025;
 	public static final swagWidth:Float = 160 * 0.7;
 
 	public static final colArray:Array<String> = ['purple', 'blue', 'green', 'red'];
@@ -518,7 +521,9 @@ class Note extends FlxSprite
 				cachedSustainIsEnd = curAnim != null && curAnim.name.endsWith('end');
 			}
 
-			var sustainScaleY:Float = cachedSustainIsEnd ? 1 : Conductor.stepCrochet * 0.0105 * (songSpeed * multSpeed) * sustainScale;
+			var sustainScaleY:Float = cachedSustainIsEnd ? 1 :
+				Conductor.stepCrochet * 0.0105 * (songSpeed * multSpeed) * sustainScale *
+				(PlayState.isPixelStage ? 1 : SUSTAIN_TEXTURE_OVERLAP);
 			if (PlayState.isPixelStage) sustainScaleY *= PlayState.daPixelZoom * 1.20;
 
 			// copyScaleX overwrites X below, so do not write a temporary 0.7 value.
