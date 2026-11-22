@@ -2560,6 +2560,8 @@ class PlayState extends MusicBeatState
 		var gottaHitNote:Bool = false;
 		var swagNote:PreloadedChartNote;
 		var ghostNotesCleared:Int = 0;
+		var lastCheckedNoteSkin:String = null;
+		final jackCount:Int = jackingtime > 0 ? Std.int(jackingtime) : 0;
 		// TODO: Optimize and clean up this mess, maybe split into functions
 		// this is absolute spaghetti code
 		for (section in noteData) {
@@ -2577,6 +2579,19 @@ class PlayState extends MusicBeatState
 
 				if (songNotes[0] >= chartStartTime) {
 					final daStrumTime:Float = songNotes[0];
+					// Resolve dynamic chart metadata once per source note. Its sustain
+					// segments and optional jack notes reuse these values.
+					final rawNoteType:Dynamic = songNotes[3];
+					final noteTypeIsString:Bool = Std.isOfType(rawNoteType, String);
+					final noteTypeIsBool:Bool = Std.isOfType(rawNoteType, Bool);
+					final hurtNote:Bool = rawNoteType == 'Hurt Note';
+					final gfSingNote:Bool = rawNoteType == 'GF Sing';
+					final noAnimationNote:Bool = rawNoteType == 'No Animation';
+					final altAnimationNote:Bool = rawNoteType == 'Alt Animation';
+					final noteTypeName:Dynamic = noteTypeIsString ? rawNoteType : ChartingState.noteTypeList[rawNoteType];
+					final normalAnimSuffix:String = (altAnimationNote || section.altAnim) ? '-alt' : '';
+					final noteAnimSuffix:String = (normalAnimSuffix != '' || (noteTypeIsBool && rawNoteType == true)) ? '-alt' : '';
+					final noteSkinName:String = gottaHitNote ? bfNoteskin : dadNoteskin;
 					var daNoteData:Int = 0;
 					if (!assignedFirstData && oneK)
 					{
@@ -2642,43 +2657,46 @@ class PlayState extends MusicBeatState
 						noteData: daNoteData,
 						mustPress: bothSides || gottaHitNote,
 						oppNote: (opponentChart ? gottaHitNote : !gottaHitNote),
-						noteType: songNotes[3],
-						animSuffix: (songNotes[3] == 'Alt Animation' || section.altAnim ? '-alt' : ''),
-						noteskin: (gottaHitNote ? bfNoteskin : dadNoteskin),
-						gfNote: songNotes[3] == 'GF Sing' || (section.gfSection && songNotes[1] < 4),
-						noAnimation: songNotes[3] == 'No Animation',
-						noMissAnimation: songNotes[3] == 'No Animation',
+						noteType: noteTypeName,
+						animSuffix: noteAnimSuffix,
+						noteskin: noteSkinName,
+						gfNote: gfSingNote || (section.gfSection && songNotes[1] < 4),
+						noAnimation: noAnimationNote,
+						noMissAnimation: noAnimationNote,
 						sustainLength: songNotes[2],
 						hitHealth: 0.023,
-						missHealth: songNotes[3] != 'Hurt Note' ? 0.0475 : 0.3,
+						missHealth: !hurtNote ? 0.0475 : 0.3,
 						wasHit: false,
-						hitCausesMiss: songNotes[3] == 'Hurt Note',
+						hitCausesMiss: hurtNote,
 						multSpeed: 1,
 						multAlpha: 1,
 						noteDensity: currentMultiplier,
-						ignoreNote: songNotes[3] == 'Hurt Note' && gottaHitNote
+						ignoreNote: hurtNote && gottaHitNote
 					};
-					if (swagNote.noteskin.length > 0 && !Paths.noteSkinFramesMap.exists(swagNote.noteskin)) inline Paths.initNote(swagNote.noteskin);
-
-					if(!Std.isOfType(songNotes[3], String)) swagNote.noteType = ChartingState.noteTypeList[songNotes[3]]; //Backward compatibility + compatibility with Week 7 charts
-
-					if(Std.isOfType(songNotes[3], Bool)) swagNote.animSuffix = (songNotes[3] || section.altAnim ? '-alt' : ''); //Compatibility with charts made by SNIFF
-
-					if (!noteTypeMap.exists(swagNote.noteType)) {
-						noteTypeMap.set(swagNote.noteType, true);
+					// Charts usually keep the same skin for long runs of notes. Only
+					// query/initialize the skin map when that skin actually changes.
+					if (noteSkinName != lastCheckedNoteSkin)
+					{
+						lastCheckedNoteSkin = noteSkinName;
+						if (noteSkinName.length > 0 && !Paths.noteSkinFramesMap.exists(noteSkinName))
+							inline Paths.initNote(noteSkinName);
 					}
+
+					// The map is only used as a set of unique note types; setting an
+					// existing key is cheaper than a separate exists() lookup.
+					noteTypeMap.set(swagNote.noteType, true);
 
 					unspawnNotes.push(swagNote);
 
-					if (jackingtime > 0) {
-						for (j in 0...Std.int(jackingtime)) {
+					if (jackCount > 0) {
+						for (j in 0...jackCount) {
 							final jackNote:PreloadedChartNote = {
 								strumTime: swagNote.strumTime + (15000 / SONG.bpm) * (j + 1),
 								noteData: swagNote.noteData,
 								mustPress: swagNote.mustPress,
 								oppNote: swagNote.oppNote,
 								noteType: swagNote.noteType,
-								animSuffix: (songNotes[3] == 'Alt Animation' || section.altAnim ? '-alt' : ''),
+								animSuffix: normalAnimSuffix,
 								noteskin: (gottaHitNote ? bfNoteskin : dadNoteskin),
 								gfNote: swagNote.gfNote,
 								isSustainNote: false,
@@ -2708,22 +2726,22 @@ class PlayState extends MusicBeatState
 								mustPress: bothSides || gottaHitNote,
 								oppNote: (opponentChart ? gottaHitNote : !gottaHitNote),
 								noteType: songNotes[3],
-								animSuffix: (songNotes[3] == 'Alt Animation' || section.altAnim ? '-alt' : ''),
+								animSuffix: normalAnimSuffix,
 								noteskin: (gottaHitNote ? bfNoteskin : dadNoteskin),
-								gfNote: songNotes[3] == 'GF Sing' || (section.gfSection && songNotes[1] < 4),
-								noAnimation: songNotes[3] == 'No Animation',
+								gfNote: swagNote.gfNote,
+								noAnimation: noAnimationNote,
 								isSustainNote: true,
 								isSustainEnd: susNote == roundSus,
 								parentST: swagNote.strumTime,
 								parentSL: swagNote.sustainLength,
 								hitHealth: 0.023,
-								missHealth: songNotes[3] != 'Hurt Note' ? 0.0475 : 0.1,
+								missHealth: !hurtNote ? 0.0475 : 0.1,
 								wasHit: false,
 								multSpeed: 1,
 								multAlpha: 1,
 								noteDensity: currentMultiplier,
-								hitCausesMiss: songNotes[3] == 'Hurt Note',
-								ignoreNote: songNotes[3] == 'Hurt Note' && swagNote.mustPress
+								hitCausesMiss: hurtNote,
+								ignoreNote: hurtNote && swagNote.mustPress
 							};
 							unspawnNotes.push(sustainNote);
 						}
