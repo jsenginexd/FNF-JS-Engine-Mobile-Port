@@ -5664,7 +5664,11 @@ class PlayState extends MusicBeatState
 				#if mobile
 				// Keep the callback-heavy path bounded too; custom Lua/mod charts
 				// are slower per item, so use a smaller catch-up batch there.
-				final maxSkippedNotesPerFrame:Int = fastBotSkip ? 20000 : 2000;
+				// Keep catch-up work below a frame-sized CPU burst on mobile.
+				// The previous 20,000-note batch could monopolize a frame for 250ms+
+				// on dense charts. Normal playback usually has far fewer overdue notes;
+				// large seek/backlog recovery now drains over several short frames.
+				final maxSkippedNotesPerFrame:Int = fastBotSkip ? 800 : 400;
 				var processedSkippedNotes:Int = 0;
 				#end
 				while (targetNote.strumTime <= Conductor.songPosition - ClientPrefs.noteOffset
