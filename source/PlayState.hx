@@ -1462,6 +1462,23 @@ class PlayState extends MusicBeatState
 		}
 		#end
 
+		#if mobile
+		#if !FLX_NO_RENDER_ORDER
+		#if LUA_ALLOWED
+		if (luaArray.length == 0)
+		{
+		#else
+		{
+		#end
+			// Note order is maintained explicitly by bucketSortNotes(). With no
+			// Lua modcharts to set custom renderOrder values, Flixel's per-frame
+			// renderOrder sort is redundant and very expensive on dense charts.
+			notes.zIndexesAllowed = false;
+			sustainNotes.zIndexesAllowed = false;
+		}
+		#end
+		#end
+
 		RecalculateRating();
 
 		if(!ClientPrefs.controllerMode)
