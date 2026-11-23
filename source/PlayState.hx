@@ -126,7 +126,7 @@ class PlayState extends MusicBeatState
 
 	public var notes:FlxTypedGroup<Note>;
 	public var sustainNotes:FlxTypedGroup<Note>;
-	// Dense gameplay loops walk live notes only; Flixel groups retain pooled sprites for drawing/reuse.
+	// Compact live lists let mobile note updates skip dead pooled sprites; Flixel groups remain for drawing and gameplay order.
 	private var activeChartNotes:Array<Note> = [];
 	private var activeSustainChartNotes:Array<Note> = [];
 	public var killNotes:Array<Note> = [];
