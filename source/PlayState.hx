@@ -3575,41 +3575,46 @@ class PlayState extends MusicBeatState
 						noteSortFrame = 8;
 					}
 
+					final totalNotes:Int = noteLength + sustainLength;
+					final sortInterval:Int = totalNotes > 2000 ? 8 : (totalNotes > 400 ? 4 : 1);
 					#if LUA_ALLOWED
 					if (luaArray.length > 0)
 					{
 						// Modcharts can change note positions between frames, so preserve
 						// the existing periodic repair path whenever Lua scripts are loaded.
-						final totalNotes:Int = noteLength + sustainLength;
-						final sortInterval:Int = totalNotes > 2000 ? 8 : (totalNotes > 400 ? 4 : 1);
 						noteSortFrame++;
 						if (noteSortFrame >= sortInterval)
 						{
 							noteSortFrame = 0;
 							if (noteLength > 1) bucketSortNotes(notes, sortOrder);
-						if (sustainLength > 1) bucketSortNotes(sustainNotes, sortOrder);
-						 noteSortDirty = false;
-					}
+							if (sustainLength > 1) bucketSortNotes(sustainNotes, sortOrder);
+							noteSortDirty = false;
+						}
 					}
 					else
-				#end
+					#end
 					if (noteSortDirty)
 					{
-						// Note Y positions move uniformly with song time. Without scripts,
-						// appending/recycling a note is the only normal order-changing event.
-						if (noteLength > 1) bucketSortNotes(notes, sortOrder);
-						if (sustainLength > 1) bucketSortNotes(sustainNotes, sortOrder);
-						noteSortDirty = false;
-						noteSortFrame = 0;
+						// Without scripts, note Y positions move uniformly with song time.
+						// New/recycled notes are the only normal order-changing events.
+						// Keep the old 1/4/8-frame batching, but do not count idle frames.
+						noteSortFrame++;
+						if (noteSortFrame >= sortInterval)
+						{
+							if (noteLength > 1) bucketSortNotes(notes, sortOrder);
+							if (sustainLength > 1) bucketSortNotes(sustainNotes, sortOrder);
+							noteSortDirty = false;
+							noteSortFrame = 0;
+						}
 					}
 				}
 				else
 				{
-					// Keep the dirty bit so enabling note sprites restores lane order once.
+					// Force one fresh sort on the first visible frame after showing notes.
 					noteSortDirty = true;
-					noteSortFrame = 0;
+					noteSortFrame = 8;
 				}
-				final profT4:Float = profileNotes ? haxe.Timer.stamp() : 0;
+								final profT4:Float = profileNotes ? haxe.Timer.stamp() : 0;
 				if (profileNotes)
 				{
 					profUpdate = (profT2 - profT1) * 1000;
