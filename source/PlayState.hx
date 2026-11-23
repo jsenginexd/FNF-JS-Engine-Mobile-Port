@@ -5032,16 +5032,11 @@ class PlayState extends MusicBeatState
 		var firstNote:Note = null;
 		var secondNote:Note = null;
 		var hitCount:Int = 0;
-		#if LUA_ALLOWED
-		final hitCandidateNotes:Array<Note> = luaArray.length > 0 ? notes.members : activeChartNotes;
-		#else
-		final hitCandidateNotes:Array<Note> = activeChartNotes;
-		#end
 		// A blocked lane or active bot-energy input makes every candidate invalid.
 		// Check it once instead of repeating the same branch for every active note.
 		if (!usingBotEnergy && !strumsBlocked[key])
 		{
-			for (candidate in hitCandidateNotes)
+			for (candidate in notes.members)
 			{
 				if (candidate == null || !candidate.exists || candidate.noteData != key ||
 					!candidate.canBeHit || !candidate.mustPress || candidate.tooLate || candidate.wasGoodHit ||
@@ -5068,7 +5063,7 @@ class PlayState extends MusicBeatState
 		if (hitCount > 2 && ClientPrefs.ezSpam)
 		{
 			spamNotes = [];
-			for (candidate in hitCandidateNotes)
+			for (candidate in notes.members)
 			{
 				if (candidate != null && candidate.exists && candidate.noteData == key &&
 					!usingBotEnergy && !strumsBlocked[key] && candidate.canBeHit && candidate.mustPress &&
