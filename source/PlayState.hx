@@ -5586,7 +5586,7 @@ class PlayState extends MusicBeatState
 		}
 	}
 
-	private inline function registerActiveChartNote(note:Note, isSustain:Bool):Void
+	private function registerActiveChartNote(note:Note, isSustain:Bool):Void
 	{
 		if (note.activeListIndex >= 0) return;
 		final activeList:Array<Note> = isSustain ? activeSustainChartNotes : activeChartNotes;
@@ -5594,7 +5594,7 @@ class PlayState extends MusicBeatState
 		activeList.push(note);
 	}
 
-	private inline function unregisterActiveChartNote(note:Note):Void
+	private function unregisterActiveChartNote(note:Note):Void
 	{
 		var activeList:Array<Note> = note.isSustainNote ? activeSustainChartNotes : activeChartNotes;
 		var index:Int = note.activeListIndex;
@@ -5607,8 +5607,15 @@ class PlayState extends MusicBeatState
 			index = activeList.indexOf(note);
 			if (index < 0)
 			{
-				note.activeListIndex = -1;
-				return;
+				// The note may have changed from tap to sustain (or vice versa)
+				// after registration. Search the other compact list before giving up.
+				activeList = note.isSustainNote ? activeChartNotes : activeSustainChartNotes;
+				index = activeList.indexOf(note);
+				if (index < 0)
+				{
+					note.activeListIndex = -1;
+					return;
+				}
 			}
 		}
 
