@@ -3544,14 +3544,9 @@ class PlayState extends MusicBeatState
 				amountOfRenderedNotes = 0;
 				final profT1:Float = profileNotes ? haxe.Timer.stamp() : 0;
 
-				// Gameplay updates need only live notes. The Flixel groups keep dead pooled
-				// sprites for rendering/reuse, so scanning their full arrays wastes CPU.
-				#if LUA_ALLOWED
-				final noteMembers:Array<Note> = luaArray.length > 0 ? notes.members : activeChartNotes;
-				#else
-				final noteMembers:Array<Note> = activeChartNotes;
-				#end
-				final noteLength:Int = noteMembers.length;
+				// Keep gameplay callbacks in the same render-group order as before.
+				final noteMembers:Array<Note> = notes.members;
+				final noteLength:Int = notes.length;
 				var noteIndex:Int = 0;
 				while (noteIndex < noteLength)
 				{
@@ -3560,12 +3555,8 @@ class PlayState extends MusicBeatState
 				}
 				final profT2:Float = profileNotes ? haxe.Timer.stamp() : 0;
 
-				#if LUA_ALLOWED
-				final sustainMembers:Array<Note> = luaArray.length > 0 ? sustainNotes.members : activeSustainChartNotes;
-				#else
-				final sustainMembers:Array<Note> = activeSustainChartNotes;
-				#end
-				final sustainLength:Int = sustainMembers.length;
+				final sustainMembers:Array<Note> = sustainNotes.members;
+				final sustainLength:Int = sustainNotes.length;
 				noteIndex = 0;
 				while (noteIndex < sustainLength)
 				{
@@ -5041,11 +5032,16 @@ class PlayState extends MusicBeatState
 		var firstNote:Note = null;
 		var secondNote:Note = null;
 		var hitCount:Int = 0;
+		#if LUA_ALLOWED
+		final hitCandidateNotes:Array<Note> = luaArray.length > 0 ? notes.members : activeChartNotes;
+		#else
+		final hitCandidateNotes:Array<Note> = activeChartNotes;
+		#end
 		// A blocked lane or active bot-energy input makes every candidate invalid.
 		// Check it once instead of repeating the same branch for every active note.
 		if (!usingBotEnergy && !strumsBlocked[key])
 		{
-			for (candidate in notes.members)
+			for (candidate in hitCandidateNotes)
 			{
 				if (candidate == null || !candidate.exists || candidate.noteData != key ||
 					!candidate.canBeHit || !candidate.mustPress || candidate.tooLate || candidate.wasGoodHit ||
@@ -5072,7 +5068,7 @@ class PlayState extends MusicBeatState
 		if (hitCount > 2 && ClientPrefs.ezSpam)
 		{
 			spamNotes = [];
-			for (candidate in notes.members)
+			for (candidate in hitCandidateNotes)
 			{
 				if (candidate != null && candidate.exists && candidate.noteData == key &&
 					!usingBotEnergy && !strumsBlocked[key] && candidate.canBeHit && candidate.mustPress &&
@@ -5882,7 +5878,7 @@ class PlayState extends MusicBeatState
 		#else
 		final members:Array<Note> = activeList;
 		#end
-		final length:Int = group.length;
+		final length:Int = members.length;
 		var i:Int = 0;
 		while (i < length)
 		{
