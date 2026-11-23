@@ -117,7 +117,7 @@ class Note extends FlxSprite
 	public static final SUSTAIN_SIZE:Int = 44;
 	// Tiny overlap between adjacent sustain body pieces hides atlas/filtering seams
 	// without turning the hold into one solid bar or changing chart timing.
-	public static final SUSTAIN_TEXTURE_OVERLAP:Float = 1.025;
+	public static final SUSTAIN_TEXTURE_OVERLAP:Float = mobile.MobileOptimization.SUSTAIN_TEXTURE_OVERLAP;
 	public static final swagWidth:Float = 160 * 0.7;
 
 	public static final colArray:Array<String> = ['purple', 'blue', 'green', 'red'];
