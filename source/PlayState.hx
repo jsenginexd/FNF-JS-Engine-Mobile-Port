@@ -126,6 +126,9 @@ class PlayState extends MusicBeatState
 
 	public var notes:FlxTypedGroup<Note>;
 	public var sustainNotes:FlxTypedGroup<Note>;
+	// Dense gameplay loops walk live notes only; Flixel groups retain pooled sprites for drawing/reuse.
+	private var activeChartNotes:Array<Note> = [];
+	private var activeSustainChartNotes:Array<Note> = [];
 	public var killNotes:Array<Note> = [];
 	// O(1) free lists replace FlxTypedGroup.recycle(), which linearly scans
 	// every member and becomes quadratic during dense chart spawn bursts.
@@ -3245,8 +3248,8 @@ class PlayState extends MusicBeatState
 		// Note.update exits immediately, so skip the entire pass while cpuControlled.
 		if (!cpuControlled)
 		{
-			updateMobileNoteGroup(sustainNotes, elapsed);
-			updateMobileNoteGroup(notes, elapsed);
+			updateMobileNoteGroup(sustainNotes, activeSustainChartNotes, elapsed);
+			updateMobileNoteGroup(notes, activeChartNotes, elapsed);
 		}
 		#end
 
@@ -3541,10 +3544,14 @@ class PlayState extends MusicBeatState
 				amountOfRenderedNotes = 0;
 				final profT1:Float = profileNotes ? haxe.Timer.stamp() : 0;
 
-				// Walk the backing arrays directly. This avoids the per-member callback
-				// dispatch in FlxTypedGroup.forEach on charts with thousands of notes.
-				final noteMembers:Array<Note> = notes.members;
-				final noteLength:Int = notes.length;
+				// Gameplay updates need only live notes. The Flixel groups keep dead pooled
+				// sprites for rendering/reuse, so scanning their full arrays wastes CPU.
+				#if LUA_ALLOWED
+				final noteMembers:Array<Note> = luaArray.length > 0 ? notes.members : activeChartNotes;
+				#else
+				final noteMembers:Array<Note> = activeChartNotes;
+				#end
+				final noteLength:Int = noteMembers.length;
 				var noteIndex:Int = 0;
 				while (noteIndex < noteLength)
 				{
@@ -3553,8 +3560,12 @@ class PlayState extends MusicBeatState
 				}
 				final profT2:Float = profileNotes ? haxe.Timer.stamp() : 0;
 
-				final sustainMembers:Array<Note> = sustainNotes.members;
-				final sustainLength:Int = sustainNotes.length;
+				#if LUA_ALLOWED
+				final sustainMembers:Array<Note> = luaArray.length > 0 ? sustainNotes.members : activeSustainChartNotes;
+				#else
+				final sustainMembers:Array<Note> = activeSustainChartNotes;
+				#end
+				final sustainLength:Int = sustainMembers.length;
 				noteIndex = 0;
 				while (noteIndex < sustainLength)
 				{
@@ -4768,6 +4779,10 @@ class PlayState extends MusicBeatState
 	public function KillNotes() {
 		// All currently spawned notes are removed below.
 		limitNC = 0;
+		for (note in activeChartNotes) if (note != null) note.activeListIndex = -1;
+		for (note in activeSustainChartNotes) if (note != null) note.activeListIndex = -1;
+		activeChartNotes.resize(0);
+		activeSustainChartNotes.resize(0);
 		if (notes != null)
 		{
 			for (note in notes.members)
@@ -4776,6 +4791,7 @@ class PlayState extends MusicBeatState
 				note.countsTowardLimit = false;
 				note.inNoteGroup = false;
 				note.inFreeNotePool = false;
+				note.activeListIndex = -1;
 				note.kill();
 			}
 			// remove(note, true) searches and shifts the array for every member.
@@ -5579,6 +5595,41 @@ class PlayState extends MusicBeatState
 		}
 	}
 
+	private inline function registerActiveChartNote(note:Note, isSustain:Bool):Void
+	{
+		if (note.activeListIndex >= 0) return;
+		final activeList:Array<Note> = isSustain ? activeSustainChartNotes : activeChartNotes;
+		note.activeListIndex = activeList.length;
+		activeList.push(note);
+	}
+
+	private inline function unregisterActiveChartNote(note:Note):Void
+	{
+		var activeList:Array<Note> = note.isSustainNote ? activeSustainChartNotes : activeChartNotes;
+		var index:Int = note.activeListIndex;
+		if (index < 0) return;
+
+		// Normal removal is O(1). Recover safely if an external script changed
+		// the note's sustain type or otherwise invalidated its cached index.
+		if (index >= activeList.length || activeList[index] != note)
+		{
+			index = activeList.indexOf(note);
+			if (index < 0)
+			{
+				note.activeListIndex = -1;
+				return;
+			}
+		}
+
+		final last:Note = activeList.pop();
+		if (index < activeList.length)
+		{
+			activeList[index] = last;
+			last.activeListIndex = index;
+		}
+		note.activeListIndex = -1;
+	}
+
 	private inline function recycleChartNote(isSustain:Bool):Note
 	{
 		final group:FlxTypedGroup<Note> = isSustain ? sustainNotes : notes;
@@ -5603,6 +5654,7 @@ class PlayState extends MusicBeatState
 			group.add(note);
 			note.inNoteGroup = true;
 		}
+		registerActiveChartNote(note, isSustain);
 		// A recycled note may have a different lane/time than its previous life.
 		// Mark both mobile render groups for one stable re-sort after spawning.
 		noteSortDirty = true;
@@ -5823,9 +5875,13 @@ class PlayState extends MusicBeatState
 	}
 
 	#if mobile
-	private inline function updateMobileNoteGroup(group:FlxTypedGroup<Note>, elapsed:Float):Void
+	private inline function updateMobileNoteGroup(group:FlxTypedGroup<Note>, activeList:Array<Note>, elapsed:Float):Void
 	{
-		final members:Array<Note> = group.members;
+		#if LUA_ALLOWED
+		final members:Array<Note> = luaArray.length > 0 ? group.members : activeList;
+		#else
+		final members:Array<Note> = activeList;
+		#end
 		final length:Int = group.length;
 		var i:Int = 0;
 		while (i < length)
@@ -6352,6 +6408,7 @@ class PlayState extends MusicBeatState
 				noteKill.countsTowardLimit = false;
 				if (limitNC > 0) limitNC--;
 			}
+			unregisterActiveChartNote(noteKill);
 			noteKill.kill();
 			if (!noteKill.inFreeNotePool)
 			{
