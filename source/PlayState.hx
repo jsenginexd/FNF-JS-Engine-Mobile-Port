@@ -4797,6 +4797,7 @@ class PlayState extends MusicBeatState
 				note.countsTowardLimit = false;
 				note.inNoteGroup = false;
 				note.inFreeNotePool = false;
+				note.activeListIndex = -1;
 				note.kill();
 			}
 			sustainNotes.clear();
