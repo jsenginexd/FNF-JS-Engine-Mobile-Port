@@ -16,7 +16,7 @@ class NativeNoteMath
 		songSpeed:Float, multSpeed:Float, downScroll:Bool):Float
 	{
 		var result:Float = 0.45 * (songPosition - strumTime) * songSpeed * multSpeed;
-		return downScroll ? result : -result;
+		return downScroll ? -result : result;
 	}
 
 	#if cpp
