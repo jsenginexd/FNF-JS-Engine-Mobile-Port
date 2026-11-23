@@ -1,7 +1,7 @@
 package debug.mem;
 
 import debug.Memory;
-#if cpp
+#if (cpp && !android)
 import cpp.SizeT;
 
 /**
