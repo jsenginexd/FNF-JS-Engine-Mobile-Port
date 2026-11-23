@@ -3088,6 +3088,11 @@ class PlayState extends MusicBeatState
 	var limitNC = 0;
 	// Large note groups do not need a full draw-order repair on every frame.
 	var noteSortFrame:Int = 0;
+	// Without modchart scripts, active notes keep their relative Y order during
+	// normal playback. Re-sort only after membership or scroll-order changes.
+	// Scripted charts retain the periodic sort because scripts may move notes.
+	var noteSortDirty:Bool = true;
+	var lastNoteSortOrder:Int = -1;
 	// Reused lane buckets avoid quadratic cross-lane moves when dense charts append
 	// notes in time order but with mixed note directions.
 	var noteSortBuckets:Array<Array<Note>> = [[], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []];
@@ -3563,17 +3568,47 @@ class PlayState extends MusicBeatState
 				if (ClientPrefs.showNotes)
 				{
 					final sortOrder:Int = ClientPrefs.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING;
-					final totalNotes:Int = noteLength + sustainLength;
-					final sortInterval:Int = totalNotes > 2000 ? 8 : (totalNotes > 400 ? 4 : 1);
-					noteSortFrame++;
-					if (noteSortFrame >= sortInterval)
+					if (sortOrder != lastNoteSortOrder)
 					{
-						noteSortFrame = 0;
+						lastNoteSortOrder = sortOrder;
+						noteSortDirty = true;
+						noteSortFrame = 8;
+					}
+
+					#if LUA_ALLOWED
+					if (luaArray.length > 0)
+					{
+						// Modcharts can change note positions between frames, so preserve
+						// the existing periodic repair path whenever Lua scripts are loaded.
+						final totalNotes:Int = noteLength + sustainLength;
+						final sortInterval:Int = totalNotes > 2000 ? 8 : (totalNotes > 400 ? 4 : 1);
+						noteSortFrame++;
+						if (noteSortFrame >= sortInterval)
+						{
+							noteSortFrame = 0;
+							if (noteLength > 1) bucketSortNotes(notes, sortOrder);
+						if (sustainLength > 1) bucketSortNotes(sustainNotes, sortOrder);
+						 noteSortDirty = false;
+					}
+					}
+					else
+				#end
+					if (noteSortDirty)
+					{
+						// Note Y positions move uniformly with song time. Without scripts,
+						// appending/recycling a note is the only normal order-changing event.
 						if (noteLength > 1) bucketSortNotes(notes, sortOrder);
 						if (sustainLength > 1) bucketSortNotes(sustainNotes, sortOrder);
+						noteSortDirty = false;
+						noteSortFrame = 0;
 					}
 				}
-				else noteSortFrame = 8; // force a fresh order on the first visible frame
+				else
+				{
+					// Keep the dirty bit so enabling note sprites restores lane order once.
+					noteSortDirty = true;
+					noteSortFrame = 0;
+				}
 				final profT4:Float = profileNotes ? haxe.Timer.stamp() : 0;
 				if (profileNotes)
 				{
@@ -5563,6 +5598,9 @@ class PlayState extends MusicBeatState
 			group.add(note);
 			note.inNoteGroup = true;
 		}
+		// A recycled note may have a different lane/time than its previous life.
+		// Mark both mobile render groups for one stable re-sort after spawning.
+		noteSortDirty = true;
 		return note;
 	}
 
