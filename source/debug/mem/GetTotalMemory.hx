@@ -25,6 +25,9 @@ extern class GetTotalMemory
  */
 class GetTotalMemory
 {
+	// Keep the highest observed GC memory value for the lifetime of the process.
+	static var memPeak:Float = 0;
+
 	/**
 	 * (Non cpp platform)
 	 * Returns 0.
@@ -32,10 +35,9 @@ class GetTotalMemory
 	public static function getPeakRSS():Float
 	{
 		// might not be the smartest move?
-		var memPeak:Float;
-
-		if (getCurrentRSS() > memPeak)
-			memPeak = getCurrentRSS();
+		var currentMemory:Float = getCurrentRSS();
+		if (currentMemory > memPeak)
+			memPeak = currentMemory;
 
 		return memPeak;
 	}
