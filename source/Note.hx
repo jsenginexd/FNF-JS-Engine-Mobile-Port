@@ -546,8 +546,7 @@ class Note extends FlxSprite
 			if (!copyScaleX) updateHitboxIfNeeded();
 		}
 
-		distance = (0.45 * (Conductor.songPosition - strumTime) * songSpeed * multSpeed);
-		if (!ClientPrefs.downScroll) distance *= -1;
+		distance = mobile.NativeNoteMath.noteDistance(Conductor.songPosition, strumTime, songSpeed, multSpeed, ClientPrefs.downScroll);
 
 		if (copyAngle)
 		{
