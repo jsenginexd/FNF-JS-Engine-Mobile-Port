@@ -228,7 +228,7 @@ class Note extends FlxSprite
 			if (frames != @:privateAccess Paths.noteSkinFramesMap.get(value)) frames = @:privateAccess Paths.noteSkinFramesMap.get(value);
 			if (animation != @:privateAccess Paths.noteSkinAnimsMap.get(value)) animation.copyFrom(@:privateAccess Paths.noteSkinAnimsMap.get(value));
 
-			antialiasing = ClientPrefs.globalAntialiasing;
+			mobile.MobileOptimization.applyNoteSmoothing(this, pixelNote);
 
 			if (!changeSize)
 			{
@@ -297,7 +297,7 @@ class Note extends FlxSprite
 		if (!Math.isNaN(newStrumTime)) strumTime = newStrumTime;
 
 		y -= 2000;
-		antialiasing = ClientPrefs.globalAntialiasing && !pixelNote;
+		mobile.MobileOptimization.applyNoteSmoothing(this, pixelNote);
 
 		if(noteData > -1) {
 			if (ClientPrefs.showNotes) texture = Paths.defaultSkin;
@@ -448,7 +448,7 @@ class Note extends FlxSprite
 				centerOffsets();
 				centerOrigin();
 			}
-			antialiasing = ClientPrefs.globalAntialiasing;
+			mobile.MobileOptimization.applyNoteSmoothing(this, pixelNote);
 		}
 		if(isSustainNote) {
 			scale.y = lastScaleY;
