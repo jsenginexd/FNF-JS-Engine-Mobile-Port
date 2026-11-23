@@ -90,3 +90,20 @@ than copied as incompatible C++.
   can slightly increase texture sampling cost.
 - Benchmark dense charts at fixed scroll speed and fixed camera zoom.
 - Verify sustain seams at multiple zoom levels and both scroll directions.
+
+
+## HXCPP native C++ kernels (implemented, benchmark pending)
+
+26. **Native note-distance kernel**: primitive-only HXCPP C++ implementation for
+    the per-note scroll-distance calculation, with an equivalent Haxe fallback
+    for non-C++ targets.
+27. **Native sustain-scale kernel**: primitive-only HXCPP C++ implementation
+    for sustain scale calculation, including pixel-stage and end-cap cases.
+28. **No object marshalling**: these kernels accept only scalar values, avoiding
+    conversion of Haxe arrays or sprite objects across the native boundary.
+
+These kernels prove the native integration path and preserve the same formulas.
+They are not yet evidence of a measurable speedup: HXCPP already compiles Haxe
+to C++, so the next step is profiling and comparing generated native code. Larger
+wins are expected only from reducing allocations, traversals, and memory traffic,
+not merely rewriting arithmetic in C++.
