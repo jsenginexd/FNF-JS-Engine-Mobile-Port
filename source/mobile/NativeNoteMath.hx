@@ -20,7 +20,7 @@ class NativeNoteMath
 	}
 
 	#if cpp
-	@:functionCode("if (isEnd) return 1.0; double value = stepCrochet * 0.0105 * (songSpeed * multSpeed) * sustainScale * (pixelStage ? 1.0 : overlap); if (pixelStage) value *= pixelZoom * 1.20; return value;")
+	@:functionCode("if (isEnd) return 1.0; double nativeScaleValue = stepCrochet * 0.0105 * (songSpeed * multSpeed) * sustainScale * (pixelStage ? 1.0 : overlap); if (pixelStage) nativeScaleValue *= pixelZoom * 1.20; return nativeScaleValue;")
 	#end
 	public static function sustainScale(stepCrochet:Float, songSpeed:Float,
 		multSpeed:Float, sustainScale:Float, pixelStage:Bool,
