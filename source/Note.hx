@@ -523,10 +523,10 @@ class Note extends FlxSprite
 				cachedSustainIsEnd = curAnim != null && curAnim.name.endsWith('end');
 			}
 
-			var sustainScaleY:Float = cachedSustainIsEnd ? 1 :
-				Conductor.stepCrochet * 0.0105 * (songSpeed * multSpeed) * sustainScale *
-				(PlayState.isPixelStage ? 1 : SUSTAIN_TEXTURE_OVERLAP);
-			if (PlayState.isPixelStage) sustainScaleY *= PlayState.daPixelZoom * 1.20;
+			var sustainScaleY:Float = mobile.NativeNoteMath.sustainScale(
+				Conductor.stepCrochet, songSpeed, multSpeed, sustainScale,
+				PlayState.isPixelStage, SUSTAIN_TEXTURE_OVERLAP,
+				PlayState.daPixelZoom, cachedSustainIsEnd);
 
 			// copyScaleX overwrites X below, so do not write a temporary 0.7 value.
 			// Avoid dirtying the scale point when the sustain dimensions are unchanged.
