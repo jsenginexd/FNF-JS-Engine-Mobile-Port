@@ -85,6 +85,8 @@ class Note extends FlxSprite
 	// Pool bookkeeping: avoid scanning the entire FlxTypedGroup on each spawn.
 	public var inNoteGroup:Bool = false;
 	public var inFreeNotePool:Bool = false;
+	// Index in PlayState's compact live-note list; -1 means not currently active.
+	public var activeListIndex:Int = -1;
 	public var ignoreNote:Bool = false;
 	public var hitByOpponent:Bool = false; //For Opponent notes
 
