@@ -10,13 +10,13 @@ package mobile;
 class NativeNoteMath
 {
 	#if cpp
-	@:functionCode("return (0.45 * (songPosition - strumTime) * songSpeed * multSpeed) * (downScroll ? -1.0 : 1.0);")
+	@:functionCode("return (0.45 * (songPosition - strumTime) * songSpeed * multSpeed) * (downScroll ? 1.0 : -1.0);")
 	#end
 	public static function noteDistance(songPosition:Float, strumTime:Float,
 		songSpeed:Float, multSpeed:Float, downScroll:Bool):Float
 	{
 		var result:Float = 0.45 * (songPosition - strumTime) * songSpeed * multSpeed;
-		return downScroll ? -result : result;
+		return downScroll ? result : -result;
 	}
 
 	#if cpp
