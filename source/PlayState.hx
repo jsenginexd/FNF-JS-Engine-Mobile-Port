@@ -2219,8 +2219,12 @@ class PlayState extends MusicBeatState
 			var i:Int = group.length - 1;
 			while (i >= 0) {
 				var daNote:Note = group.members[i];
-				if(daNote.strumTime - 350 < time)
+				if(daNote != null && daNote.strumTime - 350 < time)
 				{
+					// A seek removes notes from both Flixel's group and the compact
+					// mobile live list; otherwise the latter retains stale references.
+					unregisterActiveChartNote(daNote);
+					daNote.inNoteGroup = false;
 					// A note can be queued for destruction and cleared by a seek in the
 					// same frame. The per-note flag prevents the live counter decrementing twice.
 					if (daNote.countsTowardLimit)
@@ -4950,7 +4954,7 @@ class PlayState extends MusicBeatState
 				var tempCombo:Float = (combo > 0 ? combo : -combo);
 				var tempComboAlt:Float = tempCombo;
 
-				separatedScore = [];
+				separatedScore.resize(0);
 				while(tempCombo >= 10)
 				{
 					separatedScore.unshift(Math.ffloor(tempCombo / 10) % 10);
@@ -6946,29 +6950,19 @@ class PlayState extends MusicBeatState
 			 * # @Equinoxtic was here, hi :3
 			 */
 
-			final fcConditions:Array<Bool> = [
-				(totalPlayed == 0), // 'No Play'
-				(perfects > 0), // 'PFC'
-				(sicks > 0), // 'SFC'
-				(goods > 0), // 'GFC'
-				(bads > 0), // 'BFC'
-				(shits > 0), // 'FC'
-				(songMisses > 0 && songMisses < 10), // 'SDCB'
-				(songMisses >= 10), // 'Clear'
-				(songMisses >= 100), // 'TDCB'
-				(songMisses >= 1000) // 'QDCB'
-			];
-
-			var cond:Int = fcConditions.length - 1;
+			// Evaluate in the same priority order as the former reverse-scanned
+			// condition array, without allocating a fresh Bool array for each hit.
 			ratingFC = "";
-			while (cond >= 0)
-			{
-				if (fcConditions[cond]) {
-					ratingFC = fcStrings[cond];
-					break;
-				}
-				cond--;
-			}
+			if (songMisses >= 1000) ratingFC = fcStrings[9];
+			else if (songMisses >= 100) ratingFC = fcStrings[8];
+			else if (songMisses >= 10) ratingFC = fcStrings[7];
+			else if (songMisses > 0) ratingFC = fcStrings[6];
+			else if (shits > 0) ratingFC = fcStrings[5];
+			else if (bads > 0) ratingFC = fcStrings[4];
+			else if (goods > 0) ratingFC = fcStrings[3];
+			else if (sicks > 0) ratingFC = fcStrings[2];
+			else if (perfects > 0) ratingFC = fcStrings[1];
+			else if (totalPlayed == 0) ratingFC = fcStrings[0];
 
 			// basically same stuff, doesn't update every frame but it also means no memory leaks during botplay
 			if (scoreTxt != null)
