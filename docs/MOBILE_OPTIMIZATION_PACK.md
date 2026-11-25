@@ -132,3 +132,12 @@ BotPlay charts before claiming a device-side FPS gain.
     small number of already-sorted time ranges in linear passes, preserving the
     relative order of equal-time notes. Fall back to the existing general sort
     when there are many disordered ranges.
+
+34. **Mobile note sampling**: note atlases and receptors use smooth sampling
+    even when a stage uses pixel-style UI; their rendering positions are no longer
+    snapped to whole display pixels. Stage art and non-note sprites retain their
+    normal pixel-art policy.
+35. **Cached scroll-distance factor**: each note recalculates its combined
+    scroll-speed multiplier only when song speed or that note's speed multiplier
+    changes. Per-frame distance updates then use one delta multiplication and
+    preserve the existing upscroll/downscroll sign convention.
