@@ -192,6 +192,13 @@ class Note extends FlxSprite
 	private var sustainScaleCacheIsEnd:Bool = false;
 	private var cachedSustainScaleY:Float = 1;
 
+	// The distance multiplier changes rarely; cache it instead of rebuilding
+	// 0.45 * songSpeed * multSpeed for every note on every gameplay frame.
+	private var noteDistanceCacheValid:Bool = false;
+	private var noteDistanceCacheSongSpeed:Float = 0;
+	private var noteDistanceCacheMultSpeed:Float = 0;
+	private var noteDistanceCacheFactor:Float = 0;
+
 	// Cache the last clipping rectangle. Most sustain notes are not crossing a receptor,
 	// so repeatedly clipping an unchanged full frame is wasted CPU work.
 	private var clipCacheValid:Bool = false;
@@ -200,6 +207,21 @@ class Note extends FlxSprite
 	private var clipCacheY:Float = 0;
 	private var clipCacheWidth:Float = 0;
 	private var clipCacheHeight:Float = 0;
+
+	private inline function getCachedNoteDistance(songPosition:Float, songSpeed:Float, downScroll:Bool):Float
+	{
+		if (!noteDistanceCacheValid || noteDistanceCacheSongSpeed != songSpeed ||
+			noteDistanceCacheMultSpeed != multSpeed)
+		{
+			noteDistanceCacheSongSpeed = songSpeed;
+			noteDistanceCacheMultSpeed = multSpeed;
+			noteDistanceCacheFactor = 0.45 * songSpeed * multSpeed;
+			noteDistanceCacheValid = true;
+		}
+
+		final result:Float = (songPosition - strumTime) * noteDistanceCacheFactor;
+		return downScroll ? result : -result;
+	}
 
 	private inline function updateHitboxIfNeeded():Void
 	{
@@ -579,7 +601,7 @@ class Note extends FlxSprite
 			if (!copyScaleX) updateHitboxIfNeeded();
 		}
 
-		distance = mobile.NativeNoteMath.noteDistance(Conductor.songPosition, strumTime, songSpeed, multSpeed, ClientPrefs.downScroll);
+		distance = getCachedNoteDistance(Conductor.songPosition, songSpeed, ClientPrefs.downScroll);
 
 		if (copyAngle)
 		{
