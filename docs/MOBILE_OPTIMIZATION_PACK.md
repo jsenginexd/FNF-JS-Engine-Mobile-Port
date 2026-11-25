@@ -127,3 +127,8 @@ These changes preserve the original note timing, note count, visual frames,
 combo ranking precedence, and chart ordering. Confirm the Android build and test
 seek/restart, all sustain types, BPM changes, both scroll directions, and dense
 BotPlay charts before claiming a device-side FPS gain.
+
+33. **Adaptive stable chart merge**: leave fully sorted charts untouched; merge a
+    small number of already-sorted time ranges in linear passes, preserving the
+    relative order of equal-time notes. Fall back to the existing general sort
+    when there are many disordered ranges.
