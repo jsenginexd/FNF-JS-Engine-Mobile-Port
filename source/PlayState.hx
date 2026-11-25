@@ -2794,7 +2794,7 @@ class PlayState extends MusicBeatState
 				}
 		}
 		// trace('["${SONG.song.toUpperCase()}" CHART INFO]: Ghost Notes Cleared: $ghostNotesCleared');
-		if (!chartNotesAreSorted()) unspawnNotes.sort(sortByTime);
+		sortChartNotesAdaptive();
 		if (!eventNotesAreSorted()) eventNotes.sort(sortByTime);
 		generatedMusic = true;
 
@@ -2889,15 +2889,79 @@ class PlayState extends MusicBeatState
 		return 0;
 	}
 
-	private function chartNotesAreSorted():Bool
+	private function sortChartNotesAdaptive():Void
 	{
+		final length:Int = unspawnNotes.length;
+		if (length < 2) return;
+
+		// Find already-sorted runs. The common chart path exits after one
+		// linear scan; a few out-of-order runs are merged stably in O(n log r).
+		final runBounds:Array<Int> = [0];
 		var i:Int = 1;
-		while (i < unspawnNotes.length)
+		while (i < length)
 		{
-			if (unspawnNotes[i - 1].strumTime > unspawnNotes[i].strumTime) return false;
+			if (unspawnNotes[i - 1].strumTime > unspawnNotes[i].strumTime)
+			{
+				runBounds.push(i);
+				// Many runs: use the engine's general-purpose sort instead.
+				if (runBounds.length > 8)
+				{
+					unspawnNotes.sort(sortByTime);
+					return;
+				}
+			}
 			i++;
 		}
-		return true;
+
+		if (runBounds.length == 1) return;
+		runBounds.push(length);
+
+		final buffer:Array<PreloadedChartNote> = [];
+		buffer.resize(length);
+		var bounds:Array<Int> = runBounds;
+		while (bounds.length > 2)
+		{
+			final nextBounds:Array<Int> = [bounds[0]];
+			var run:Int = 0;
+			while (run < bounds.length - 1)
+			{
+				if (run + 2 < bounds.length)
+				{
+					final start:Int = bounds[run];
+					final middle:Int = bounds[run + 1];
+					final end:Int = bounds[run + 2];
+					var left:Int = start;
+					var right:Int = middle;
+					var write:Int = start;
+
+					// <= keeps equal-time notes in their original chart order.
+					while (left < middle && right < end)
+					{
+						if (unspawnNotes[left].strumTime <= unspawnNotes[right].strumTime)
+							buffer[write++] = unspawnNotes[left++];
+						else
+							buffer[write++] = unspawnNotes[right++];
+					}
+					while (left < middle) buffer[write++] = unspawnNotes[left++];
+					while (right < end) buffer[write++] = unspawnNotes[right++];
+
+					var copy:Int = start;
+					while (copy < end)
+					{
+						unspawnNotes[copy] = buffer[copy];
+						copy++;
+					}
+					nextBounds.push(end);
+					run += 2;
+				}
+				else
+				{
+					nextBounds.push(bounds[run + 1]);
+					run++;
+				}
+			}
+			bounds = nextBounds;
+		}
 	}
 
 	private function eventNotesAreSorted():Bool
