@@ -107,3 +107,23 @@ They are not yet evidence of a measurable speedup: HXCPP already compiles Haxe
 to C++, so the next step is profiling and comparing generated native code. Larger
 wins are expected only from reducing allocations, traversals, and memory traffic,
 not merely rewriting arithmetic in C++.
+
+## Latest measured-risk reductions (build validation pending)
+
+29. **Per-sustain scale cache**: calculate a sustain's vertical scale only when
+    BPM step duration, song speed, note speed multiplier, note skin scale,
+    pixel-stage mode, pixel zoom, or end-cap state changes. This avoids repeating
+    the same native math call for every unchanged sustain on every frame.
+30. **Allocation-free rating-rank selection**: replace the temporary ten-item
+    Boolean array in rating recalculation with ordered comparisons while keeping
+    the exact original priority and fcStrings indexes.
+31. **Reusable combo digit storage**: clear the existing combo-digit array rather
+    than allocate a new array for every popup.
+32. **Seek cleanup consistency**: unregister notes from the compact active-note
+    lists before removing them from Flixel groups; clear the group-membership flag
+    and guard null group entries to avoid stale references after seeking.
+
+These changes preserve the original note timing, note count, visual frames,
+combo ranking precedence, and chart ordering. Confirm the Android build and test
+seek/restart, all sustain types, BPM changes, both scroll directions, and dense
+BotPlay charts before claiming a device-side FPS gain.
