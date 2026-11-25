@@ -474,6 +474,10 @@ class Note extends FlxSprite
 			setGraphicSize(editors.ChartingState.GRID_SIZE, editors.ChartingState.GRID_SIZE);
 			updateHitbox();
 		}
+
+		// Reapply after frame/animation/size changes: atlas reloads can reset
+		// sprite filtering. Keep pixel-art crisp and smooth regular note skins.
+		mobile.MobileOptimization.applyNoteSmoothing(this, pixelNote);
 	}
 
 	public static function getNoteSkinPostfix()
