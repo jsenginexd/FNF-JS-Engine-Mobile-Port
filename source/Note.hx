@@ -180,6 +180,18 @@ class Note extends FlxSprite
 	private var cachedSustainAnim:Dynamic = null;
 	private var cachedSustainIsEnd:Bool = false;
 
+	// Sustain geometry is constant for most frames. Cache its scale until one of
+	// the inputs changes (BPM, scroll speed, skin scale, pixel mode, or end cap).
+	private var sustainScaleCacheValid:Bool = false;
+	private var sustainScaleCacheStepCrochet:Float = 0;
+	private var sustainScaleCacheSongSpeed:Float = 0;
+	private var sustainScaleCacheMultSpeed:Float = 0;
+	private var sustainScaleCacheNoteScale:Float = 0;
+	private var sustainScaleCachePixelZoom:Float = 0;
+	private var sustainScaleCachePixelStage:Bool = false;
+	private var sustainScaleCacheIsEnd:Bool = false;
+	private var cachedSustainScaleY:Float = 1;
+
 	// Cache the last clipping rectangle. Most sustain notes are not crossing a receptor,
 	// so repeatedly clipping an unchanged full frame is wasted CPU work.
 	private var clipCacheValid:Bool = false;
@@ -523,10 +535,27 @@ class Note extends FlxSprite
 				cachedSustainIsEnd = curAnim != null && curAnim.name.endsWith('end');
 			}
 
-			var sustainScaleY:Float = mobile.NativeNoteMath.sustainScale(
-				Conductor.stepCrochet, songSpeed, multSpeed, sustainScale,
-				PlayState.isPixelStage, SUSTAIN_TEXTURE_OVERLAP,
-				PlayState.daPixelZoom, cachedSustainIsEnd);
+			final stepCrochet:Float = Conductor.stepCrochet;
+			final pixelStage:Bool = PlayState.isPixelStage;
+			final pixelZoom:Float = PlayState.daPixelZoom;
+			if (!sustainScaleCacheValid || sustainScaleCacheStepCrochet != stepCrochet ||
+				sustainScaleCacheSongSpeed != songSpeed || sustainScaleCacheMultSpeed != multSpeed ||
+				sustainScaleCacheNoteScale != sustainScale || sustainScaleCachePixelZoom != pixelZoom ||
+				sustainScaleCachePixelStage != pixelStage || sustainScaleCacheIsEnd != cachedSustainIsEnd)
+			{
+				cachedSustainScaleY = mobile.NativeNoteMath.sustainScale(
+					stepCrochet, songSpeed, multSpeed, sustainScale,
+					pixelStage, SUSTAIN_TEXTURE_OVERLAP, pixelZoom, cachedSustainIsEnd);
+				sustainScaleCacheStepCrochet = stepCrochet;
+				sustainScaleCacheSongSpeed = songSpeed;
+				sustainScaleCacheMultSpeed = multSpeed;
+				sustainScaleCacheNoteScale = sustainScale;
+				sustainScaleCachePixelZoom = pixelZoom;
+				sustainScaleCachePixelStage = pixelStage;
+				sustainScaleCacheIsEnd = cachedSustainIsEnd;
+				sustainScaleCacheValid = true;
+			}
+			final sustainScaleY:Float = cachedSustainScaleY;
 
 			// copyScaleX overwrites X below, so do not write a temporary 0.7 value.
 			// Avoid dirtying the scale point when the sustain dimensions are unchanged.
