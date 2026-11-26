@@ -199,6 +199,15 @@ class Note extends FlxSprite
 	private var noteDistanceCacheMultSpeed:Float = 0;
 	private var noteDistanceCacheFactor:Float = 0;
 
+	// Hit windows are stable for the lifetime of a note in normal gameplay.
+	// Rebuild their products only if a preference/mod changes the multipliers.
+	private var hitWindowCacheValid:Bool = false;
+	private var hitWindowCacheSafeZone:Float = 0;
+	private var hitWindowCacheLateMult:Float = 0;
+	private var hitWindowCacheEarlyMult:Float = 0;
+	private var cachedLateHitWindow:Float = 0;
+	private var cachedEarlyHitWindow:Float = 0;
+
 	// Cache the last clipping rectangle. Most sustain notes are not crossing a receptor,
 	// so repeatedly clipping an unchanged full frame is wasted CPU work.
 	private var clipCacheValid:Bool = false;
@@ -521,24 +530,34 @@ class Note extends FlxSprite
 
 		super.update(elapsed);
 
+		final songPosition:Float = Conductor.songPosition;
+		final safeZone:Float = Conductor.safeZoneOffset;
+		if (!hitWindowCacheValid || hitWindowCacheSafeZone != safeZone ||
+			hitWindowCacheLateMult != lateHitMult || hitWindowCacheEarlyMult != earlyHitMult)
+		{
+			cachedLateHitWindow = safeZone * lateHitMult;
+			cachedEarlyHitWindow = safeZone * earlyHitMult;
+			hitWindowCacheSafeZone = safeZone;
+			hitWindowCacheLateMult = lateHitMult;
+			hitWindowCacheEarlyMult = earlyHitMult;
+			hitWindowCacheValid = true;
+		}
+
 		if (mustPress)
 		{
-			canBeHit = (strumTime > Conductor.songPosition - (Conductor.safeZoneOffset * lateHitMult) &&
-						strumTime < Conductor.songPosition + (Conductor.safeZoneOffset * earlyHitMult));
+			canBeHit = (strumTime > songPosition - cachedLateHitWindow &&
+						strumTime < songPosition + cachedEarlyHitWindow);
 
-			if (strumTime < Conductor.songPosition - Conductor.safeZoneOffset && !wasGoodHit && !ignoreNote)
+			if (strumTime < songPosition - safeZone && !wasGoodHit && !ignoreNote)
 				tooLate = true;
-			else tooLate = false;
+			else if (tooLate) tooLate = false;
 		}
 		else
 		{
-			canBeHit = false;
+			if (canBeHit) canBeHit = false;
 
-			if (strumTime < Conductor.songPosition + (Conductor.safeZoneOffset * earlyHitMult))
-			{
-				if(strumTime <= Conductor.songPosition)
-					wasGoodHit = true;
-			}
+			if (strumTime < songPosition + cachedEarlyHitWindow && strumTime <= songPosition)
+				wasGoodHit = true;
 		}
 
 		if (tooLate && !inEditor)
