@@ -140,4 +140,8 @@ BotPlay charts before claiming a device-side FPS gain.
 35. **Cached scroll-distance factor**: each note recalculates its combined
     scroll-speed multiplier only when song speed or that note's speed multiplier
     changes. Per-frame distance updates then use one delta multiplication and
-    preserve the existing upscroll/downscroll sign convention.
+    preserve the existing upscroll/downscroll sign convention.\n
+36. **Cached note hit windows**: precompute each note's early/late hit-window
+    products when its safe-zone or multipliers change. The per-frame timing
+    update reuses those values and snapshots song position once, preserving the
+    original strict comparison boundaries and hit/late semantics.
