@@ -168,8 +168,6 @@ class PlayState extends MusicBeatState
 
 	var notesAddedCount:Int = 0;
 	var eventIndex:Int = 0;
-	var notesToRemoveCount:Int = 0;
-	var oppNotesToRemoveCount:Int = 0;
 
 	var endingTimeLimit:Int = 20;
 
