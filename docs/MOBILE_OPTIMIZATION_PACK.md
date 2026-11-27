@@ -133,14 +133,21 @@ BotPlay charts before claiming a device-side FPS gain.
     relative order of equal-time notes. Fall back to the existing general sort
     when there are many disordered ranges.
 
-34. **Mobile note sampling**: note atlases and receptors use smooth sampling
-    even when a stage uses pixel-style UI; their rendering positions are no longer
-    snapped to whole display pixels. Stage art and non-note sprites retain their
-    normal pixel-art policy.
+34. **Scale-aware mobile note sampling**: regular note atlases and receptors
+    use smooth filtering and sub-pixel rendering; pixel-art notes retain nearest
+    sampling and pixel-aligned rendering. The setting is applied after atlas
+    reloads so animation changes cannot reset it.
 35. **Cached scroll-distance factor**: each note recalculates its combined
     scroll-speed multiplier only when song speed or that note's speed multiplier
     changes. Per-frame distance updates then use one delta multiplication and
-    preserve the existing upscroll/downscroll sign convention.\n
+    preserve the existing upscroll/downscroll sign convention.
+36. **Absolute hit-window boundaries**: each note caches its early, late, and
+    expiration time boundaries when its strum time or timing preferences change.
+    The per-frame hit test uses direct comparisons rather than rebuilding
+    temporary sums and products.
+37. **Hybrid stable lane sorting**: nearly sorted lanes keep the low-cost
+    insertion path; heavily disordered lanes switch to a reusable stable merge
+    buffer, avoiding quadratic worst-case sorting while preserving equal-Y order.\n
 36. **Cached note hit windows**: precompute each note's early/late hit-window
     products when its safe-zone or multipliers change. The per-frame timing
     update reuses those values and snapshots song position once, preserving the
