@@ -147,8 +147,8 @@ BotPlay charts before claiming a device-side FPS gain.
     temporary sums and products.
 37. **Hybrid stable lane sorting**: nearly sorted lanes keep the low-cost
     insertion path; heavily disordered lanes switch to a reusable stable merge
-    buffer, avoiding quadratic worst-case sorting while preserving equal-Y order.\n
-36. **Cached note hit windows**: precompute each note's early/late hit-window
-    products when its safe-zone or multipliers change. The per-frame timing
-    update reuses those values and snapshots song position once, preserving the
-    original strict comparison boundaries and hit/late semantics.
+    buffer, avoiding quadratic worst-case sorting while preserving equal-Y order.
+38. **NPS history cursors**: advance read cursors when old samples leave the
+    rolling window and compact the arrays only after a large consumed prefix.
+    This avoids shifting every surviving hit/date pair on each update while
+    preserving the same rolling-window sums.
