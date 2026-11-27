@@ -296,6 +296,10 @@ class PlayState extends MusicBeatState
 	var oppNotesHitArray:Array<Float> = [];
 	var notesHitDateArray:Array<Float> = [];
 	var oppNotesHitDateArray:Array<Float> = [];
+	// NPS history uses read cursors instead of shifting every remaining item
+	// from the front of four arrays whenever a time window expires.
+	var notesHitStartIndex:Int = 0;
+	var oppNotesHitStartIndex:Int = 0;
 
 	var dialogue:Array<String> = ['blah blah blah', 'coolswag'];
 	var dialogueJson:DialogueFile = null;
@@ -3339,47 +3343,38 @@ class PlayState extends MusicBeatState
 				}
 			}
 		}
-		if (ClientPrefs.showNPS && (notesHitDateArray.length > 0 || oppNotesHitDateArray.length > 0)) {
-			// hits are stored in time order, so stop at the first one that is still inside the window
-			notesToRemoveCount = 0;
-			var i = 0;
+		if (ClientPrefs.showNPS && (notesHitStartIndex < notesHitDateArray.length || oppNotesHitStartIndex < oppNotesHitDateArray.length)) {
+			// Histories are appended in hit-time order. Advance cursors instead of
+			// Array.splice(0, n), which copied every surviving sample on each frame.
 			final npsWindow:Float = 1000 * npsSpeedMult;
+			final currentSongPosition:Float = Conductor.songPosition;
 
-			while (i < notesHitDateArray.length) {
-				if (!Math.isNaN(notesHitDateArray[i]) && (notesHitDateArray[i] + npsWindow < Conductor.songPosition)) {
-					npsSum -= notesHitArray[i];
-					notesToRemoveCount++;
+			while (notesHitStartIndex < notesHitDateArray.length)
+			{
+				final hitDate:Float = notesHitDateArray[notesHitStartIndex];
+				if (!Math.isNaN(hitDate) && hitDate + npsWindow < currentSongPosition)
+				{
+					npsSum -= notesHitArray[notesHitStartIndex];
+					notesHitStartIndex++;
 				}
 				else break;
-				i++;
 			}
-
-			if (notesToRemoveCount > 0) {
-				notesHitDateArray.splice(0, notesToRemoveCount);
-				notesHitArray.splice(0, notesToRemoveCount);
-			}
+			notesHitStartIndex = compactNpsHistory(notesHitArray, notesHitDateArray, notesHitStartIndex);
 			if (notesHitArray.length == 0) npsSum = 0;
-
 			nps = npsSum;
 
-			oppNotesToRemoveCount = 0;
-			i = 0;
-
-			while (i < oppNotesHitDateArray.length) {
-				if (!Math.isNaN(oppNotesHitDateArray[i]) && (oppNotesHitDateArray[i] + npsWindow < Conductor.songPosition)) {
-					oppNpsSum -= oppNotesHitArray[i];
-					oppNotesToRemoveCount++;
+			while (oppNotesHitStartIndex < oppNotesHitDateArray.length)
+			{
+				final hitDate:Float = oppNotesHitDateArray[oppNotesHitStartIndex];
+				if (!Math.isNaN(hitDate) && hitDate + npsWindow < currentSongPosition)
+				{
+					oppNpsSum -= oppNotesHitArray[oppNotesHitStartIndex];
+					oppNotesHitStartIndex++;
 				}
 				else break;
-				i++;
 			}
-
-			if (oppNotesToRemoveCount > 0) {
-				oppNotesHitDateArray.splice(0, oppNotesToRemoveCount);
-				oppNotesHitArray.splice(0, oppNotesToRemoveCount);
-			}
+			oppNotesHitStartIndex = compactNpsHistory(oppNotesHitArray, oppNotesHitDateArray, oppNotesHitStartIndex);
 			if (oppNotesHitArray.length == 0) oppNpsSum = 0;
-
 			oppNPS = oppNpsSum;
 
 			if (oppNPS > maxOppNPS) {
@@ -5909,6 +5904,40 @@ class PlayState extends MusicBeatState
 		}
 
 		return refreshScore;
+	}
+
+	/**
+	 * Reclaim expired NPS history without shifting on every frame. A full
+	 * clear happens when all entries expire; partial compaction is amortized
+	 * and uses the existing arrays without allocating new ones.
+	 */
+	private function compactNpsHistory(values:Array<Float>, dates:Array<Float>, startIndex:Int):Int
+	{
+		final length:Int = dates.length;
+		if (startIndex <= 0) return 0;
+		if (startIndex >= length)
+		{
+			values.resize(0);
+			dates.resize(0);
+			return 0;
+		}
+
+		if (startIndex >= 512 && startIndex >= (length - startIndex))
+		{
+			var readIndex:Int = startIndex;
+			var writeIndex:Int = 0;
+			while (readIndex < length)
+			{
+				values[writeIndex] = values[readIndex];
+				dates[writeIndex] = dates[readIndex];
+				readIndex++;
+				writeIndex++;
+			}
+			values.resize(writeIndex);
+			dates.resize(writeIndex);
+			return 0;
+		}
+		return startIndex;
 	}
 
 	function spawnNotes()
