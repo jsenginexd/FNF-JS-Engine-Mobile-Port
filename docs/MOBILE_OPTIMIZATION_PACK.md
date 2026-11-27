@@ -141,10 +141,9 @@ BotPlay charts before claiming a device-side FPS gain.
     scroll-speed multiplier only when song speed or that note's speed multiplier
     changes. Per-frame distance updates then use one delta multiplication and
     preserve the existing upscroll/downscroll sign convention.
-36. **Absolute hit-window boundaries**: each note caches its early, late, and
-    expiration time boundaries when its strum time or timing preferences change.
-    The per-frame hit test uses direct comparisons rather than rebuilding
-    temporary sums and products.
+36. **Cached hit-window multipliers**: each note caches the early/late
+    safe-zone products when timing preferences change. The original comparison
+    expressions and strict boundaries remain unchanged to preserve hit accuracy.
 37. **Hybrid stable lane sorting**: nearly sorted lanes keep the low-cost
     insertion path; heavily disordered lanes switch to a reusable stable merge
     buffer, avoiding quadratic worst-case sorting while preserving equal-Y order.
