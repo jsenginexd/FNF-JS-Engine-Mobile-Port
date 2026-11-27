@@ -19,11 +19,10 @@ class MobileOptimization
 	public static inline function applyNoteSmoothing(sprite:FlxSprite, pixelArt:Bool):Void
 	{
 		#if mobile
-		// Mobile note atlases are rendered with linear smoothing even when a
-		// stage advertises pixel UI. This affects notes/receptors only, not the
-		// stage art, and avoids forcing their edges onto whole display pixels.
-		sprite.antialiasing = true;
-		sprite.pixelPerfectRender = false;
+		// Keep the two visual modes separate: pixel skins stay crisp and snapped;
+		// regular atlases are smoothly sampled and may move at sub-pixel positions.
+		sprite.antialiasing = !pixelArt;
+		sprite.pixelPerfectRender = pixelArt;
 		#else
 		sprite.antialiasing = ClientPrefs.globalAntialiasing && !pixelArt;
 		#end
