@@ -3167,6 +3167,8 @@ class PlayState extends MusicBeatState
 	// Reused lane buckets avoid quadratic cross-lane moves when dense charts append
 	// notes in time order but with mixed note directions.
 	var noteSortBuckets:Array<Array<Note>> = [[], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []];
+	// Reused merge buffer: only grows when a lane reaches a new high-water mark.
+	var noteSortScratch:Array<Note> = [];
 	public var amountOfRenderedNotes:Float = 0;
 	public var maxRenderedNotes:Float = 0;
 	public var skippedCount:Float = 0;
@@ -5562,6 +5564,104 @@ class PlayState extends MusicBeatState
 		}
 	}
 
+	private inline function noteYComesAfter(a:Note, b:Note, order:Int):Bool
+	{
+		return order == FlxSort.ASCENDING ? a.y > b.y : a.y < b.y;
+	}
+
+	/**
+	 * Keep the cheap insertion path for nearly sorted lanes, but fall back to a
+	 * stable bottom-up merge when lots of items move. This avoids quadratic
+	 * worst-case work on dense/modded charts without changing equal-Y priority.
+	 */
+	private function sortNoteBucket(bucket:Array<Note>, order:Int):Void
+	{
+		final length:Int = bucket.length;
+		if (length < 2) return;
+
+		final moveLimit:Int = length >> 1;
+		var moves:Int = 0;
+		var i:Int = 1;
+		while (i < length)
+		{
+			final current:Note = bucket[i];
+			if (!noteYComesAfter(bucket[i - 1], current, order))
+			{
+				i++;
+				continue;
+			}
+
+			var j:Int = i - 1;
+			while (j >= 0 && noteYComesAfter(bucket[j], current, order))
+			{
+				bucket[j + 1] = bucket[j];
+				j--;
+				moves++;
+				if (moves > moveLimit)
+				{
+					bucket[j + 1] = current;
+					stableMergeSortNoteBucket(bucket, order);
+					return;
+				}
+			}
+			bucket[j + 1] = current;
+			i++;
+		}
+	}
+
+	private function stableMergeSortNoteBucket(bucket:Array<Note>, order:Int):Void
+	{
+		final length:Int = bucket.length;
+		if (length < 2) return;
+
+		if (noteSortScratch.length < length)
+			noteSortScratch.resize(length);
+
+		var source:Array<Note> = bucket;
+		var target:Array<Note> = noteSortScratch;
+		var width:Int = 1;
+		while (width < length)
+		{
+			var start:Int = 0;
+			while (start < length)
+			{
+				final middle:Int = start + width < length ? start + width : length;
+				final doubleWidth:Int = width * 2;
+				final end:Int = start + doubleWidth < length ? start + doubleWidth : length;
+				var left:Int = start;
+				var right:Int = middle;
+				var write:Int = start;
+
+				while (left < middle && right < end)
+				{
+					// Select the left item on ties to preserve original lane priority.
+					if (!noteYComesAfter(source[left], source[right], order))
+						target[write++] = source[left++];
+					else
+						target[write++] = source[right++];
+				}
+				while (left < middle) target[write++] = source[left++];
+				while (right < end) target[write++] = source[right++];
+				start = end;
+			}
+
+			final temp:Array<Note> = source;
+			source = target;
+			target = temp;
+			width *= 2;
+		}
+
+		if (source != bucket)
+		{
+			var i:Int = 0;
+			while (i < length)
+			{
+				bucket[i] = source[i];
+				i++;
+			}
+		}
+	}
+
 	private function bucketSortNotes(group:FlxTypedGroup<Note>, order:Int):Void
 	{
 		final members:Array<Note> = group.members;
@@ -5602,20 +5702,8 @@ class PlayState extends MusicBeatState
 		while (bucketIndex < buckets.length)
 		{
 			final bucket:Array<Note> = buckets[bucketIndex];
-			var bucketLength:Int = bucket.length;
-			var sortIndex:Int = 1;
-			while (sortIndex < bucketLength)
-			{
-				final current:Note = bucket[sortIndex];
-				var j:Int = sortIndex - 1;
-				while (j >= 0 && (order == FlxSort.ASCENDING ? bucket[j].y > current.y : bucket[j].y < current.y))
-				{
-					bucket[j + 1] = bucket[j];
-					j--;
-				}
-				bucket[j + 1] = current;
-				sortIndex++;
-			}
+			final bucketLength:Int = bucket.length;
+			sortNoteBucket(bucket, order);
 			var memberIndex:Int = 0;
 			while (memberIndex < bucketLength)
 			{
