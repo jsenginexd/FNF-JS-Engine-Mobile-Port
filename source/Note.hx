@@ -199,17 +199,14 @@ class Note extends FlxSprite
 	private var noteDistanceCacheMultSpeed:Float = 0;
 	private var noteDistanceCacheFactor:Float = 0;
 
-	// Cache absolute hit-window boundaries. The frame loop then performs only
-	// comparisons; it does not rebuild the same sums/products for every note.
+	// Cache only hit-window multiplications. Keep the original comparison
+	// expressions and operation order exactly to preserve floating-point edges.
 	private var hitWindowCacheValid:Bool = false;
-	private var hitWindowCacheStrumTime:Float = 0;
 	private var hitWindowCacheSafeZone:Float = 0;
 	private var hitWindowCacheLateMult:Float = 0;
 	private var hitWindowCacheEarlyMult:Float = 0;
-	private var cachedHitWindowStart:Float = 0;
-	private var cachedHitWindowEnd:Float = 0;
-	private var cachedTooLateTime:Float = 0;
-	private var cachedOpponentHitTime:Float = 0;
+	private var cachedLateHitWindow:Float = 0;
+	private var cachedEarlyHitWindow:Float = 0;
 
 	// Cache the last clipping rectangle. Most sustain notes are not crossing a receptor,
 	// so repeatedly clipping an unchanged full frame is wasted CPU work.
@@ -535,15 +532,11 @@ class Note extends FlxSprite
 
 		final songPosition:Float = Conductor.songPosition;
 		final safeZone:Float = Conductor.safeZoneOffset;
-		if (!hitWindowCacheValid || hitWindowCacheStrumTime != strumTime ||
-			hitWindowCacheSafeZone != safeZone || hitWindowCacheLateMult != lateHitMult ||
-			hitWindowCacheEarlyMult != earlyHitMult)
+		if (!hitWindowCacheValid || hitWindowCacheSafeZone != safeZone ||
+			hitWindowCacheLateMult != lateHitMult || hitWindowCacheEarlyMult != earlyHitMult)
 		{
-			cachedHitWindowStart = strumTime - safeZone * earlyHitMult;
-			cachedHitWindowEnd = strumTime + safeZone * lateHitMult;
-			cachedTooLateTime = strumTime + safeZone;
-			cachedOpponentHitTime = cachedHitWindowStart;
-			hitWindowCacheStrumTime = strumTime;
+			cachedLateHitWindow = safeZone * lateHitMult;
+			cachedEarlyHitWindow = safeZone * earlyHitMult;
 			hitWindowCacheSafeZone = safeZone;
 			hitWindowCacheLateMult = lateHitMult;
 			hitWindowCacheEarlyMult = earlyHitMult;
@@ -552,9 +545,11 @@ class Note extends FlxSprite
 
 		if (mustPress)
 		{
-			canBeHit = songPosition > cachedHitWindowStart && songPosition < cachedHitWindowEnd;
+			// Keep the original expression order; its strict edges are gameplay timing.
+			canBeHit = (strumTime > songPosition - cachedLateHitWindow &&
+						strumTime < songPosition + cachedEarlyHitWindow);
 
-			if (songPosition > cachedTooLateTime && !wasGoodHit && !ignoreNote)
+			if (strumTime < songPosition - safeZone && !wasGoodHit && !ignoreNote)
 				tooLate = true;
 			else if (tooLate) tooLate = false;
 		}
@@ -562,7 +557,7 @@ class Note extends FlxSprite
 		{
 			if (canBeHit) canBeHit = false;
 
-			if (songPosition > cachedOpponentHitTime && songPosition >= strumTime)
+			if (strumTime < songPosition + cachedEarlyHitWindow && strumTime <= songPosition)
 				wasGoodHit = true;
 		}
 
