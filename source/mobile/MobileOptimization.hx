@@ -23,6 +23,7 @@ class MobileOptimization
 		// regular atlases are smoothly sampled and may move at sub-pixel positions.
 		sprite.antialiasing = !pixelArt;
 		sprite.pixelPerfectRender = pixelArt;
+		sprite.pixelPerfectPosition = pixelArt;
 		#else
 		sprite.antialiasing = ClientPrefs.globalAntialiasing && !pixelArt;
 		#end
