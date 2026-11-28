@@ -287,7 +287,7 @@ class Note extends FlxSprite
 			offsetX = 0;
 		}
 		else if (!pixelNote) return value;
-		else if (pixelNote && inEditor) reloadNote(value);
+		else if (pixelNote) reloadNote(value);
 		texture = value;
 		return value;
 	}
