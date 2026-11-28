@@ -85,6 +85,29 @@ class MobileOptimization
 	}
 
 	/** Preserve the original on-screen arrow dimensions after reducing source pixels. */
+	/** Android uses the compact 4x5 mobile atlas for all note skins. */
+	public static inline function usePixelNoteSkin(pixelStage:Bool):Bool
+	{
+		#if mobile
+		return true;
+		#else
+		return pixelStage;
+		#end
+	}
+
+	/** The 40x25 source has 10x5 cells; compensate to retain 17x17 display geometry. */
+	public static inline function setCompactPixelNoteSize(sprite:FlxSprite, baseScale:Float):Void
+	{
+		#if mobile
+		sprite.setGraphicSize(
+			Std.int(sprite.width * baseScale * 1.7),
+			Std.int(sprite.height * baseScale * 3.4)
+		);
+		#else
+		sprite.setGraphicSize(Std.int(sprite.width * baseScale));
+		#end
+	}
+
 	public static inline function noteDisplayScale(baseScale:Float):Float
 	{
 		#if mobile

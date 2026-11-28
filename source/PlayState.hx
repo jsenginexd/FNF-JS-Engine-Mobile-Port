@@ -639,7 +639,8 @@ class PlayState extends MusicBeatState
 
 		if (Note.globalRgbShaders.length > 0) Note.globalRgbShaders = [];
 		Paths.initDefaultSkin(SONG.arrowSkin);
-		Paths.initNote(Paths.defaultSkin);
+		if (!mobile.MobileOptimization.usePixelNoteSkin(isPixelStage))
+			Paths.initNote(Paths.defaultSkin);
 
 		if(isPixelStage) {
 			introSoundsSuffix = '-pixel';
@@ -2694,7 +2695,8 @@ class PlayState extends MusicBeatState
 					if (noteSkinName != lastCheckedNoteSkin)
 					{
 						lastCheckedNoteSkin = noteSkinName;
-						if (noteSkinName.length > 0 && !Paths.noteSkinFramesMap.exists(noteSkinName))
+						if (!mobile.MobileOptimization.usePixelNoteSkin(isPixelStage) &&
+							noteSkinName.length > 0 && !Paths.noteSkinFramesMap.exists(noteSkinName))
 							inline Paths.initNote(noteSkinName);
 					}
 

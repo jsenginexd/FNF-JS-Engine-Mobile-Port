@@ -458,7 +458,14 @@ class Note extends FlxSprite
 			skin = customSkin;
 			_lastValidChecked = customSkin;
 		}
-		else skinPostfix = '';
+		else
+		{
+			skinPostfix = '';
+			#if mobile
+			if (pixelNote && !Paths.fileExists('images/pixelUI/' + skinPixel + '.png', IMAGE))
+				skinPixel = 'noteskins/NOTE_assets';
+			#end
+		}
 
 		if(pixelNote) {
 			if(isSustainNote) {
@@ -469,7 +476,10 @@ class Note extends FlxSprite
 				var graphic = Paths.image('pixelUI/' + skinPixel + skinPostfix);
 				loadGraphic(graphic, true, Math.floor(graphic.width / 4), Math.floor(graphic.height / 5));
 			}
-			setGraphicSize(Std.int(width * PlayState.daPixelZoom));
+			if (isSustainNote)
+				setGraphicSize(Std.int(width * PlayState.daPixelZoom));
+			else
+				mobile.MobileOptimization.setCompactPixelNoteSize(this, PlayState.daPixelZoom);
 			if(isSustainNote)
 			{
 				animation.add(colArray[noteData] + 'holdend', [noteData + 4], 24, true);

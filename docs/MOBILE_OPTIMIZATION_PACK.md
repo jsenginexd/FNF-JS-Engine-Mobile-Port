@@ -7,12 +7,15 @@ than copied as incompatible C++.
 
 ## Visual quality (implemented)
 
-1. **Full-resolution mobile note atlas**: Android uses the shared
-   5470x238 note atlas instead of enlarging the 60x40 pixelUI atlas on pixel
-   stages. The latter caused visibly blocky arrows and sustain pieces.
-2. **Linear note sampling**: mobile note and receptor sprites use smooth
-   filtering and sub-pixel placement after every atlas reload. Stage art keeps
-   its normal pixel-art behavior.
+1. **Compact mobile note atlas**: Android uses 40x25 pixelUI note sheets
+   (1,000 source pixels) with the original 4x5 grid and all 20 receptor frames.
+   Notes are scaled non-uniformly at render time to retain their original
+   on-screen dimensions; the source intentionally has much lower detail.
+2. **No unused high-resolution note upload**: skip the 5470x238 Sparrow note
+   atlas preload on mobile when the compact pixel atlas is active. This avoids
+   uploading a large texture that gameplay does not use.
+3. **Pixel-preserving note sampling**: compact mobile arrows use nearest/pixel
+   rendering; backgrounds retain the 70% mobile texture policy.
 3. **Sustain seam overlap**: adjacent sustain pieces overlap slightly to hide
    atlas/filter seams without changing hit timing or note count.
 4. **No visual LOD that removes notes**: every chart note, sustain segment, and

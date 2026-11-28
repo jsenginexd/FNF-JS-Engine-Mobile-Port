@@ -49,10 +49,11 @@ class Paths
     if (noteSkin != null && noteSkin.length > 0)
     {
       #if mobile
-      // Mobile uses the smooth atlas. Pixel-only custom skins fall back to it.
-      defaultSkin = Paths.fileExists('images/' + noteSkin + '.png', IMAGE)
+      // Mobile note skins are resolved from the compact pixel atlas.
+      final pixelSkin:String = noteSkin + Note.getNoteSkinPostfix();
+      defaultSkin = Paths.fileExists('images/pixelUI/' + pixelSkin + '.png', IMAGE)
         ? noteSkin
-        : 'noteskins/NOTE_assets' + Note.getNoteSkinPostfix();
+        : 'noteskins/NOTE_assets';
       #else
       defaultSkin = noteSkin;
       #end

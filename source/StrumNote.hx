@@ -84,10 +84,13 @@ class StrumNote extends FlxSprite
 		else skin = Note.defaultNoteSkin;
 
 		var customSkin:String = skin + Note.getNoteSkinPostfix();
-		if(Paths.fileExists('images/$customSkin.png', IMAGE)) skin = customSkin;
 		#if mobile
-		else if (!mobile.MobileOptimization.usePixelNoteSkin(PlayState.isPixelStage))
-			skin = Paths.defaultSkin;
+		if (mobile.MobileOptimization.usePixelNoteSkin(PlayState.isPixelStage))
+			skin = Paths.fileExists('images/pixelUI/$customSkin.png', IMAGE) ? customSkin : 'noteskins/NOTE_assets';
+		else
+			skin = Paths.fileExists('images/$customSkin.png', IMAGE) ? customSkin : Paths.defaultSkin;
+		#else
+		if (Paths.fileExists('images/$customSkin.png', IMAGE)) skin = customSkin;
 		#end
 
 		texture = skin; //Load texture and anims
@@ -109,7 +112,7 @@ class StrumNote extends FlxSprite
 			loadGraphic(Paths.image('pixelUI/' + texture), true, Math.floor(width), Math.floor(height));
 
 			antialiasing = false;
-			setGraphicSize(Std.int(width * PlayState.daPixelZoom));
+			mobile.MobileOptimization.setCompactPixelNoteSize(this, PlayState.daPixelZoom);
 
 			animation.add('green', [6]);
 			animation.add('red', [7]);
