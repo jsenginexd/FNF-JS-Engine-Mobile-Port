@@ -123,6 +123,12 @@ class ClientPrefs { //default settings if it can't find a save file containing y
 	public static var cacheSustainScale:Bool = true;
 	public static var cacheSustainClipping:Bool = true;
 	public static var cacheNoteHitWindows:Bool = true;
+	// Additional mobile rendering and hot-path controls.
+	public static var cacheNoteDistance:Bool = true;
+	public static var cacheNoteTransforms:Bool = true;
+	public static var cacheSustainHitbox:Bool = true;
+	public static var batchBotplaySkips:Bool = #if mobile true #else false #end;
+	public static var fastMobileNoteRenderLoop:Bool = #if mobile true #else false #end;
 
 	//Secret Debug
 	public static var noGunsRNG:Bool = false;
