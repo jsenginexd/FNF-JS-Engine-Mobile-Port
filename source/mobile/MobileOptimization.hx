@@ -93,12 +93,6 @@ class MobileOptimization
 		return baseScale;
 		#end
 	}
-	/** 85% linear resolution for note textures; displayed size is compensated. */
-	public static inline var NOTE_TEXTURE_QUALITY:Float = 0.85;
-	/** 70% linear resolution for stage backgrounds and non-note effects. */
-	public static inline var BACKGROUND_TEXTURE_QUALITY:Float = 0.70;
-	public static inline var NOTE_DISPLAY_COMPENSATION:Float = 1.0 / NOTE_TEXTURE_QUALITY;
-
 	/**
 	 * Apply the correct filtering policy to note and receptor sprites.
 	 * This does not change sprite dimensions, note count, animation frames,
