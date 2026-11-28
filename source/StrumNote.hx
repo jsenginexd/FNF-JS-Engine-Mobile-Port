@@ -144,7 +144,7 @@ class StrumNote extends FlxSprite
 			animation.addByPrefix('red', 'arrowRIGHT');
 
 			mobile.MobileOptimization.applyNoteSmoothing(this, mobile.MobileOptimization.usePixelNoteSkin(PlayState.isPixelStage));
-			setGraphicSize(Std.int(width * 0.7));
+			setGraphicSize(Std.int(width * mobile.MobileOptimization.noteDisplayScale(0.7)));
 
 			switch (Math.abs(noteData) % 4)
 			{
