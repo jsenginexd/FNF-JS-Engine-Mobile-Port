@@ -1084,7 +1084,11 @@ class PlayState extends MusicBeatState
 
 		energyBarBG.cameras = energyBar.cameras = energyTxt.cameras = [camHUD];
 
+		#if mobile
+		sustainNotes = new mobile.MobileNoteRenderGroup();
+		#else
 		sustainNotes = new FlxTypedGroup<Note>();
+		#end
 		#if mobile
 		// Note updates are dispatched through a direct array walk after super.update.
 		// Keep the group drawable/recyclable but skip FlxTypedGroup's callback pass.
@@ -1095,7 +1099,11 @@ class PlayState extends MusicBeatState
 		strumLineNotes = new FlxTypedGroup<StrumNote>();
 		add(strumLineNotes);
 
+		#if mobile
+		notes = new mobile.MobileNoteRenderGroup();
+		#else
 		notes = new FlxTypedGroup<Note>();
+		#end
 		#if mobile
 		notes.active = !ClientPrefs.fastMobileNoteUpdates;
 		#end
@@ -5877,6 +5885,7 @@ class PlayState extends MusicBeatState
 
 	private inline function canFastSkipBotNotes():Bool
 	{
+		if (!ClientPrefs.batchBotplaySkips) return false;
 		if (!cpuControlled || shouldDrainHealth || opponentDrain) return false;
 		if ((boyfriend != null && boyfriend.shakeScreen) || (dad != null && dad.shakeScreen) || (gf != null && gf.shakeScreen))
 			return false;
