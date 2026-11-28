@@ -3265,7 +3265,7 @@ class PlayState extends MusicBeatState
 
 		final motionX:Float = cameraMotionX;
 		final motionY:Float = cameraMotionY + noteMotionY;
-		final shouldAttach:Bool = musicPlaying && motionBlurShader.setMotion(motionX, motionY, strength);
+		final shouldAttach:Bool = musicPlaying && motionBlurShader.setMotion(motionX, motionY, strength, ClientPrefs.motionBlurQuality);
 
 		if (shouldAttach && !motionBlurShaderAttached)
 		{
