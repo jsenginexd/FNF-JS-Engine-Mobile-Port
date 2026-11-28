@@ -290,7 +290,7 @@ class Note extends FlxSprite
 	var noteColor:Array<FlxColor>;
 	public function defaultRGB()
 	{
-		noteColor = !PlayState.isPixelStage ? ClientPrefs.arrowRGB[noteData] : ClientPrefs.arrowRGBPixel[noteData];
+		noteColor = !pixelNote ? ClientPrefs.arrowRGB[noteData] : ClientPrefs.arrowRGBPixel[noteData];
 
 		if (noteColor != null && noteData > -1 && noteData <= noteColor.length)
 		{
@@ -334,7 +334,7 @@ class Note extends FlxSprite
 	{
 		super();
 
-		pixelNote = PlayState.isPixelStage;
+		pixelNote = mobile.MobileOptimization.usePixelNoteSkin(PlayState.isPixelStage);
 
 		if (!Math.isNaN(newNoteData) && pixelNote) noteData = newNoteData;
 		if (!Math.isNaN(newStrumTime)) strumTime = newStrumTime;
@@ -364,7 +364,7 @@ class Note extends FlxSprite
 				var newRGB:RGBPalette = new RGBPalette();
 				globalRgbShaders[noteData] = newRGB;
 
-				var arr:Array<FlxColor> = ClientPrefs.noteColorStyle != 'Quant-Based' ? (!PlayState.isPixelStage) ? ClientPrefs.arrowRGB[noteData] : ClientPrefs.arrowRGBPixel[noteData] : ClientPrefs.quantRGB[noteData];
+				var arr:Array<FlxColor> = ClientPrefs.noteColorStyle != 'Quant-Based' ? (note != null && note.pixelNote) ? ClientPrefs.arrowRGBPixel[noteData] : ClientPrefs.arrowRGB[noteData] : ClientPrefs.quantRGB[noteData];
 				if (arr != null && noteData > -1 && noteData <= arr.length)
 				{
 					newRGB.r = arr[0];
@@ -582,7 +582,7 @@ class Note extends FlxSprite
 			}
 
 			final stepCrochet:Float = Conductor.stepCrochet;
-			final pixelStage:Bool = PlayState.isPixelStage;
+			final pixelStage:Bool = pixelNote;
 			final pixelZoom:Float = PlayState.daPixelZoom;
 			if (!sustainScaleCacheValid || sustainScaleCacheStepCrochet != stepCrochet ||
 				sustainScaleCacheSongSpeed != songSpeed || sustainScaleCacheMultSpeed != multSpeed ||
@@ -611,7 +611,7 @@ class Note extends FlxSprite
 			}
 			else
 			{
-				final sustainScaleX:Float = PlayState.isPixelStage ? PlayState.daPixelZoom * 0.7 : 0.7;
+				final sustainScaleX:Float = pixelNote ? PlayState.daPixelZoom * 0.7 : 0.7;
 				if (scale.x != sustainScaleX || scale.y != sustainScaleY)
 					scale.set(sustainScaleX, sustainScaleY);
 			}
@@ -643,7 +643,7 @@ class Note extends FlxSprite
 			y = strum.y + offsetY + (!isSustainNote || strum.downScroll ? 0 : 55) + strum.directionSin * distance;
 			if(strum.downScroll && isSustainNote)
 			{
-				if(PlayState.isPixelStage)
+				if(pixelNote)
 				{
 					y -= PlayState.daPixelZoom * 9.5;
 				}
@@ -887,7 +887,7 @@ class Note extends FlxSprite
 			noteSplashData.texture = 'noteSplashes/HURTnoteSplashes';
 		}
 
-		if (PlayState.isPixelStage)
+		if (pixelNote)
 		{
 			@:privateAccess reloadNote(texture);
 			if (isSustainNote && !firstOffX)
@@ -897,7 +897,7 @@ class Note extends FlxSprite
 			}
 		}
 
-		if (!changeSize && !PlayState.isPixelStage)
+		if (!changeSize && !pixelNote)
 		{
 			changeSize = true;
 			setGraphicSize(Std.int(width * 0.7));
@@ -911,7 +911,7 @@ class Note extends FlxSprite
 			updateHitbox();
 			offsetX -= width / 2;
 
-			if (!PlayState.isPixelStage)
+			if (!pixelNote)
 				sustainScale = Note.SUSTAIN_SIZE / frameHeight;
 
 			updateHitbox();
