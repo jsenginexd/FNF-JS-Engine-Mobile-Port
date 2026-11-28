@@ -8,8 +8,14 @@ name: Android Build
 # create the GitHub Release (the APK is the only file attached to it).
 
 on:
+  # Build pull requests for validation; PR builds upload an APK artifact but do not publish releases.
+  pull_request:
+    branches:
+      - main
   # every push to main builds the APK and attaches it to the "MobilePort" release
   push:
+    # Feature-branch pushes are already validated by pull_request:synchronize.
+    # Building both events doubled CI time for every optimization commit.
     branches:
       - main
     tags:
@@ -41,7 +47,9 @@ env:
   APK_NAME: JS-Android.apk
 
 concurrency:
-  group: android-build
+  # Keep PR validation and branch-push validation independent; otherwise the
+  # two events for the same head cancel each other before Android compilation.
+  group: android-build-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -78,16 +86,75 @@ jobs:
         with:
           path: |
             .haxelib/
+            build/release/android/haxe/
             build/release/android/obj/
+            build/release/android/bin/.gradle/
+            build/release/android/bin/app/build/
+            build/release/android/bin/deps/androidtools/build/
+            build/release/android/bin/deps/extension-api/build/
+            ~/.gradle/caches/
+            ~/.gradle/wrapper/
+            ~/.hxcpp_cache/
+            ~/.cache/hxpkg/
           key: cache-android-build-${{ github.sha }}
           restore-keys: cache-android-build-
 
       - name: Install Haxe libraries
         run: |
           haxelib setup ~/haxelib
-          haxelib install hxcpp > /dev/null --quiet
           haxelib install hxpkg --quiet
-          haxelib run hxpkg install --force
+          HXP_STAMP="$HOME/.cache/hxpkg/install-${{ hashFiles('.hxpkg') }}"
+          CACHE_OK=1
+
+          # The local .haxelib repository is restored between PR builds. Verify
+          # every manifest dependency before reusing it; otherwise reinstall it.
+          for lib in lime openfl flixel flixel-addons flixel-tools flixel-ui hxp hxcpp hxvlc hscript hxcpp-debug-server flxanimate hxdiscord_rpc hxluajit funkin.vis grig.audio tjson hxnativefiledialog hxgamemode; do
+            lib_path="$(haxelib libpath "$lib" 2>/dev/null | tail -n 1)"
+            if [ -z "$lib_path" ] || [ ! -d "$lib_path" ]; then
+              echo "Missing cached Haxe dependency: $lib"
+              CACHE_OK=0
+              break
+            fi
+          done
+
+          HXCPP_PATH="$(haxelib libpath hxcpp 2>/dev/null | tail -n 1)"
+          # haxelib libpath prints a trailing slash; normalize it before matching
+          # the repository fork path, or every cache hit is falsely rejected.
+          HXCPP_PATH="${HXCPP_PATH%/}"
+          case "$HXCPP_PATH" in
+            */.haxelib/hxcpp/git) ;;
+            *) echo "Cached hxcpp fork is not selected: $HXCPP_PATH"; CACHE_OK=0 ;;
+          esac
+
+          if [ "$CACHE_OK" -eq 1 ]; then
+            echo "Reusing verified local Haxe dependency repository"
+          else
+            echo "Refreshing Haxe dependencies from .hxpkg"
+            haxelib run hxpkg install --force
+          fi
+
+          mkdir -p "$(dirname "$HXP_STAMP")"
+          touch "$HXP_STAMP"
+          echo "Resolved hxcpp library:"
+          haxelib path hxcpp
+          if ! haxelib path hxcpp | grep -q "/hxcpp/git"; then
+            echo "::error::Wrong hxcpp selected. Expected the repository's .haxelib/hxcpp/git fork."
+            exit 1
+          fi
+
+      # Gradle reuses task outputs/configuration, while hxcpp's content-addressed
+      # cache reuses unchanged native objects across PR commits. Cache keys inside
+      # hxcpp still include compiler versions, source hashes and compile flags.
+      - name: Configure hxcpp shared compile cache
+        run: |
+          mkdir -p "$HOME/.hxcpp_cache"
+          cat > "$HOME/.hxcpp_config.xml" <<EOF
+          <xml>
+            <set name="HXCPP_COMPILE_CACHE" value="$HOME/.hxcpp_cache" />
+            <set name="HXCPP_CACHE_MB" value="4096" />
+          </xml>
+          EOF
+          cat "$HOME/.hxcpp_config.xml"
 
       - name: Compile hxcpp tools
         run: |
@@ -119,8 +186,8 @@ jobs:
           open(p, 'w').write(s)
           PY
           grep -n "emutls" -B2 -A3 "$TC"
-          # cached 32-bit libraries were linked the old way: drop them so they are linked again from the cached objects
-          find .haxelib/lime/git/ndll/Android build/release/android -name '*-v7.so' -print -delete 2>/dev/null || true
+          # Keep the restored libraries: they were built with this same static
+          # emutls fix, and deleting them forces a native relink on every PR.
 
       - name: Configure Lime for Android
         run: |
@@ -133,8 +200,13 @@ jobs:
       - name: Rebuild Lime native libraries (armv7 + arm64)
         timeout-minutes: 60
         run: |
-          haxelib run lime rebuild android -arm64 -release
-          ls -la .haxelib/lime/git/ndll/Android/
+          LIME_NDLL=.haxelib/lime/git/ndll/Android
+          if [ -s "$LIME_NDLL/liblime-v7.so" ] && [ -s "$LIME_NDLL/liblime-64.so" ]; then
+            echo "Using restored armv7 + arm64 Lime native libraries"
+          else
+            haxelib run lime rebuild android -arm64 -release
+          fi
+          ls -la "$LIME_NDLL"
 
       # The APK must be signed or Android refuses to install it.
       # Add the repository secrets ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS to keep the SAME
@@ -159,8 +231,44 @@ jobs:
           fi
           echo "KEYSTORE=$RUNNER_TEMP/sign/release.jks" >> $GITHUB_ENV
 
+      # Route Maven Central requests through Google's hosted mirror first.
+      # Sonatype can return HTTP 429 to shared GitHub-hosted runner egress IPs.
+      # Keep Maven Central as the normal fallback in the project's own repositories.
+      - name: Configure Google Maven Central mirror
+        run: |
+          mkdir -p "$HOME/.gradle/init.d"
+          cat > "$HOME/.gradle/init.d/00-google-maven-central.gradle" <<'GRADLE'
+          def centralMirror = 'https://maven-central.storage-download.googleapis.com/maven2/'
+
+          // Buildscript classpath dependencies are resolved during project setup.
+          gradle.beforeProject { project ->
+              project.buildscript.repositories.maven {
+                  name = 'GoogleHostedMavenCentral'
+                  url = uri(centralMirror)
+              }
+          }
+
+          // Plugin marker and settings-managed dependencies also use the mirror.
+          settingsEvaluated { settings ->
+              settings.pluginManagement.repositories.maven {
+                  name = 'GoogleHostedMavenCentral'
+                  url = uri(centralMirror)
+              }
+              settings.dependencyResolutionManagement.repositories.maven {
+                  name = 'GoogleHostedMavenCentral'
+                  url = uri(centralMirror)
+              }
+          }
+          GRADLE
+          cat "$HOME/.gradle/init.d/00-google-maven-central.gradle"
+
       - name: Build APK (armv7 + arm64)
         timeout-minutes: 150
+        env:
+          # Four hosted-runner cores; allow Gradle's independent Android tasks
+          # to run concurrently as well as hxcpp's native compilation.
+          HXCPP_COMPILE_THREADS: 4
+          GRADLE_OPTS: "-Dorg.gradle.parallel=true -Dorg.gradle.caching=true -Dorg.gradle.workers.max=4"
         run: |
           rm -f assets/preload/gameRenders/renderlol.bat
           # hxcpp can hang forever after a C++ compile error, so watch the log and stop at the first one
@@ -234,7 +342,16 @@ jobs:
         with:
           path: |
             .haxelib/
+            build/release/android/haxe/
             build/release/android/obj/
+            build/release/android/bin/.gradle/
+            build/release/android/bin/app/build/
+            build/release/android/bin/deps/androidtools/build/
+            build/release/android/bin/deps/extension-api/build/
+            ~/.gradle/caches/
+            ~/.gradle/wrapper/
+            ~/.hxcpp_cache/
+            ~/.cache/hxpkg/
           key: cache-android-build-${{ github.sha }}
 
       - name: Upload APK artifact
@@ -244,18 +361,20 @@ jobs:
           path: out/${{ env.APK_NAME }}
 
       - name: Move the MobilePort tag to this commit (so "Source code" in the release matches the APK)
-        if: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
+        if: ${{ github.event_name == 'push' && github.ref_type == 'branch' && github.ref_name == 'main' }}
         run: |
           git tag -f MobilePort "$GITHUB_SHA"
           git push -f origin refs/tags/MobilePort
 
       - name: Publish release (APK only)
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.publish }}
+        # PR builds publish a uniquely tagged preview so testers can download the APK
+        # directly from Releases; main pushes keep updating the stable MobilePort release.
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && (github.ref_type == 'tag' || github.ref_name == 'main')) || (github.event_name == 'workflow_dispatch' && inputs.publish) }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || (github.event_name == 'workflow_dispatch' && inputs.tag_name || 'MobilePort') }}
-          name: ${{ env.RELEASE_NAME }}
-          prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || false }}
+          tag_name: ${{ github.event_name == 'pull_request' && format('mobile-preview-{0}', github.event.pull_request.head.sha) || (startsWith(github.ref, 'refs/tags/') && github.ref_name || (github.event_name == 'workflow_dispatch' && inputs.tag_name || 'MobilePort')) }}
+          name: ${{ github.event_name == 'pull_request' && 'FNF JS Engine Mobile Port (Preview)' || env.RELEASE_NAME }}
+          prerelease: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.prerelease) || false }}
           files: out/${{ env.APK_NAME }}
           body: |
             **FNF JS Engine Mobile Port** (Android)

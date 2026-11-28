@@ -46,8 +46,20 @@ class Paths
   // Function that initializes the first note. This way, we can recycle the notes
   public static function initDefaultSkin(?noteSkin:String, ?inEditor:Bool = false)
   {
-    if (noteSkin.length > 0) defaultSkin = noteSkin;
-    else if (!PlayState.isPixelStage) defaultSkin = 'noteskins/NOTE_assets' + Note.getNoteSkinPostfix();
+    if (noteSkin != null && noteSkin.length > 0)
+    {
+      #if mobile
+      // Mobile note skins are resolved from the compact pixel atlas.
+      final pixelSkin:String = noteSkin + Note.getNoteSkinPostfix();
+      defaultSkin = Paths.fileExists('images/pixelUI/' + pixelSkin + '.png', IMAGE)
+        ? noteSkin
+        : 'noteskins/NOTE_assets';
+      #else
+      defaultSkin = noteSkin;
+      #end
+    }
+    else if (!mobile.MobileOptimization.usePixelNoteSkin(PlayState.isPixelStage))
+      defaultSkin = 'noteskins/NOTE_assets' + Note.getNoteSkinPostfix();
     else
       defaultSkin = 'noteskins/NOTE_assets';
     trace(defaultSkin);
@@ -552,6 +564,13 @@ class Paths
       }
     }
 
+    #if mobile
+    final imageQuality:Float = mobile.MobileOptimization.imageQualityForPath(key);
+    if (imageQuality < 0.999)
+      bitmap = mobile.MobileOptimization.downsampleBitmap(bitmap, imageQuality);
+    #end
+
+
     if (ClientPrefs.cacheOnGPU && bitmap.image != null && !pixelReadExclusions.contains(key))
     {
       bitmap.lock();
@@ -726,16 +745,24 @@ class Paths
   inline static public function getSparrowAtlas(key:String, ?parentFolder:String = null):FlxAtlasFrames
   {
     var imageLoaded:FlxGraphic = image(key, parentFolder);
+    var atlasXml:Dynamic = null;
     #if MODS_ALLOWED
-    var xmlExists:Bool = false;
-
-    var xml:String = modsXml(key);
-    if (FileSystem.exists(xml)) xmlExists = true;
-
-    return FlxAtlasFrames.fromSparrow(imageLoaded, (xmlExists ? File.getContent(xml) : getPath('images/$key' + '.xml', TEXT, parentFolder)));
-    #else
-    return FlxAtlasFrames.fromSparrow(imageLoaded, getPath('images/$key' + '.xml', TEXT, parentFolder));
+    var modXmlPath:String = modsXml(key);
+    if (FileSystem.exists(modXmlPath))
+      atlasXml = File.getContent(modXmlPath);
+    else
     #end
+    {
+      final xmlPath:String = getPath('images/$key' + '.xml', TEXT, parentFolder);
+      atlasXml = OpenFlAssets.getText(xmlPath);
+    }
+
+    #if mobile
+    final atlasQuality:Float = mobile.MobileOptimization.imageQualityForPath('images/$key.png');
+    if (atlasQuality < 0.999 && atlasXml != null)
+      atlasXml = mobile.MobileOptimization.scaleSparrowXml(Std.string(atlasXml), atlasQuality);
+    #end
+    return FlxAtlasFrames.fromSparrow(imageLoaded, atlasXml);
   }
 
   inline static public function getPackerAtlas(key:String, ?parentFolder:String = null):FlxAtlasFrames

@@ -13,6 +13,7 @@ import StageData;
 import editors.CharacterEditorState;
 import editors.ChartingState;
 import flixel.addons.effects.FlxTrail;
+import mobile.MotionBlurShader;
 import flixel.input.keyboard.FlxKey;
 import flixel.ui.FlxBar;
 import flixel.util.FlxSort;
@@ -81,6 +82,12 @@ class PlayState extends MusicBeatState
 	public var grpCrossFade:FlxTypedGroup<CrossFade>;
 	public var grpGFCrossFade:FlxTypedGroup<CrossFade>;
 	public var grpBFCrossFade:FlxTypedGroup<CrossFade>;
+	// One camera-level GLSL pass replaces the old sprite-afterimage trail effect.
+	private var motionBlurShader:MotionBlurShader;
+	private var motionBlurShaderAttached:Bool = false;
+	private var motionBlurLastScrollX:Float = 0.0;
+	private var motionBlurLastScrollY:Float = 0.0;
+	private var motionBlurHasLastScroll:Bool = false;
 	public var shaderUpdates:Array<Float->Void> = [];
 	var botplayUsed:Bool = false;
 	public static var curStage:String = '';
@@ -126,7 +133,14 @@ class PlayState extends MusicBeatState
 
 	public var notes:FlxTypedGroup<Note>;
 	public var sustainNotes:FlxTypedGroup<Note>;
+	// Compact live lists let mobile note updates skip dead pooled sprites; Flixel groups remain for drawing and gameplay order.
+	private var activeChartNotes:Array<Note> = [];
+	private var activeSustainChartNotes:Array<Note> = [];
 	public var killNotes:Array<Note> = [];
+	// O(1) free lists replace FlxTypedGroup.recycle(), which linearly scans
+	// every member and becomes quadratic during dense chart spawn bursts.
+	private var freeNotes:Array<Note> = [];
+	private var freeSustainNotes:Array<Note> = [];
 	public var unspawnNotes:Array<PreloadedChartNote> = [];
 	public var eventNotes:Array<EventNote> = [];
 
@@ -161,8 +175,6 @@ class PlayState extends MusicBeatState
 
 	var notesAddedCount:Int = 0;
 	var eventIndex:Int = 0;
-	var notesToRemoveCount:Int = 0;
-	var oppNotesToRemoveCount:Int = 0;
 
 	var endingTimeLimit:Int = 20;
 
@@ -226,8 +238,11 @@ class PlayState extends MusicBeatState
 	var charChangeTimes:Array<Float> = [];
 	var charChangeNames:Array<String> = [];
 	var charChangeTypes:Array<Int> = [];
+	// Cursors avoid Array.shift(), which moves all remaining entries per event.
+	var charChangeIndex:Int = 0;
 
 	var multiChangeEvents:Array<Array<Float>> = [[], []];
+	var multiChangeIndex:Int = 0;
 
 	//Gameplay settings
 	public var healthGain:Float = 1;
@@ -270,6 +285,9 @@ class PlayState extends MusicBeatState
 	public var cameraSpeed:Float = 1;
 	var hitsoundImage:FlxSprite;
 	var hitsoundImageToLoad:String;
+	var hitsoundImageChecked:Bool = false;
+	var hitsoundImageShared:Bool = false;
+	var hitsoundImageMod:Bool = false;
 
 	//ok moxie this doesn't cause memory leaks
 	public var scoreTxtUpdateFrame:Int = 0;
@@ -283,6 +301,10 @@ class PlayState extends MusicBeatState
 	var oppNotesHitArray:Array<Float> = [];
 	var notesHitDateArray:Array<Float> = [];
 	var oppNotesHitDateArray:Array<Float> = [];
+	// NPS history uses read cursors instead of shifting every remaining item
+	// from the front of four arrays whenever a time window expires.
+	var notesHitStartIndex:Int = 0;
+	var oppNotesHitStartIndex:Int = 0;
 
 	var dialogue:Array<String> = ['blah blah blah', 'coolswag'];
 	var dialogueJson:DialogueFile = null;
@@ -624,7 +646,8 @@ class PlayState extends MusicBeatState
 
 		if (Note.globalRgbShaders.length > 0) Note.globalRgbShaders = [];
 		Paths.initDefaultSkin(SONG.arrowSkin);
-		Paths.initNote(SONG.arrowSkin);
+		if (!mobile.MobileOptimization.usePixelNoteSkin(isPixelStage))
+			Paths.initNote(Paths.defaultSkin);
 
 		if(isPixelStage) {
 			introSoundsSuffix = '-pixel';
@@ -645,6 +668,11 @@ class PlayState extends MusicBeatState
 		else
 			grpBFCrossFade = new FlxTypedGroup<CrossFade>(1); // limit
 
+		// These groups are updated manually in PlayState.update so their
+		// empty member arrays are not traversed by the normal state update.
+		grpCrossFade.active = false;
+		grpGFCrossFade.active = false;
+		grpBFCrossFade.active = false;
 		add(grpCrossFade);
 		add(grpGFCrossFade);
 		add(grpBFCrossFade);
@@ -1056,13 +1084,29 @@ class PlayState extends MusicBeatState
 
 		energyBarBG.cameras = energyBar.cameras = energyTxt.cameras = [camHUD];
 
+		#if mobile
+		sustainNotes = new mobile.MobileNoteRenderGroup();
+		#else
 		sustainNotes = new FlxTypedGroup<Note>();
+		#end
+		#if mobile
+		// Note updates are dispatched through a direct array walk after super.update.
+		// Keep the group drawable/recyclable but skip FlxTypedGroup's callback pass.
+		sustainNotes.active = !ClientPrefs.fastMobileNoteUpdates;
+		#end
 		add(sustainNotes);
 
 		strumLineNotes = new FlxTypedGroup<StrumNote>();
 		add(strumLineNotes);
 
+		#if mobile
+		notes = new mobile.MobileNoteRenderGroup();
+		#else
 		notes = new FlxTypedGroup<Note>();
+		#end
+		#if mobile
+		notes.active = !ClientPrefs.fastMobileNoteUpdates;
+		#end
 		add(notes);
 		notes.visible = sustainNotes.visible = ClientPrefs.showNotes; //that was easier than expected
 
@@ -1406,7 +1450,7 @@ class PlayState extends MusicBeatState
 		if(eventNotes.length > 1)
 		{
 			for (event in eventNotes) event.strumTime -= eventNoteEarlyTrigger(event);
-			eventNotes.sort(sortByTime);
+			if (!eventNotesAreSorted()) eventNotes.sort(sortByTime);
 		}
 
 		// SONG SPECIFIC SCRIPTS
@@ -1437,6 +1481,23 @@ class PlayState extends MusicBeatState
 				}
 			}
 		}
+		#end
+
+		#if mobile
+		#if !FLX_NO_RENDER_ORDER
+		#if LUA_ALLOWED
+		if (luaArray.length == 0)
+		{
+		#else
+		{
+		#end
+			// Note order is maintained explicitly by bucketSortNotes(). With no
+			// Lua modcharts to set custom renderOrder values, Flixel's per-frame
+			// renderOrder sort is redundant and very expensive on dense charts.
+			notes.zIndexesAllowed = false;
+			sustainNotes.zIndexesAllowed = false;
+		}
+		#end
 		#end
 
 		RecalculateRating();
@@ -2176,8 +2237,19 @@ class PlayState extends MusicBeatState
 			var i:Int = group.length - 1;
 			while (i >= 0) {
 				var daNote:Note = group.members[i];
-				if(daNote.strumTime - 350 < time)
+				if(daNote != null && daNote.strumTime - 350 < time)
 				{
+					// A seek removes notes from both Flixel's group and the compact
+					// mobile live list; otherwise the latter retains stale references.
+					unregisterActiveChartNote(daNote);
+					daNote.inNoteGroup = false;
+					// A note can be queued for destruction and cleared by a seek in the
+					// same frame. The per-note flag prevents the live counter decrementing twice.
+					if (daNote.countsTowardLimit)
+					{
+						daNote.countsTowardLimit = false;
+						if (limitNC > 0) limitNC--;
+					}
 					daNote.active = false;
 					daNote.visible = false;
 					daNote.ignoreNote = true;
@@ -2252,7 +2324,9 @@ class PlayState extends MusicBeatState
 
 		scoreTxt.text = '${tempScore}\n';
 
-		callOnLuas('onUpdateScore', [miss]);
+		#if LUA_ALLOWED
+		if (luaArray.length > 0) callOnLuas('onUpdateScore', [miss]);
+		#end
 	}
 
 	public function setSongTime(time:Float)
@@ -2401,6 +2475,9 @@ class PlayState extends MusicBeatState
 	private function generateSong(?startingPoint:Float = 0):Void
 	{
 		var offsetStart = (startingPoint > 0 ? 500 : 0);
+		final chartStartTime:Float = startingPoint + offsetStart;
+		charChangeIndex = 0;
+		multiChangeIndex = 0;
 		final startTime = haxe.Timer.stamp();
 
 		songSpeedType = ClientPrefs.getGameplaySetting('scrolltype','multiplicative');
@@ -2469,14 +2546,14 @@ class PlayState extends MusicBeatState
 			{
 				for (i in 0...event[1].length)
 				{
-					if (event[0] >= startingPoint + offsetStart)
+					if (event[0] >= chartStartTime)
 					{
-						var newEventNote:Array<Dynamic> = [event[0], event[1][i][0], event[1][i][1], event[1][i][2]];
+						final eventValues = event[1][i];
 						var subEvent:EventNote = {
-							strumTime: newEventNote[0] + ClientPrefs.noteOffset,
-							event: newEventNote[1],
-							value1: newEventNote[2],
-							value2: newEventNote[3]
+							strumTime: event[0] + ClientPrefs.noteOffset,
+							event: eventValues[0],
+							value1: eventValues[1],
+							value2: eventValues[2]
 						};
 						eventNotes.push(subEvent);
 						eventPushed(subEvent);
@@ -2488,14 +2565,14 @@ class PlayState extends MusicBeatState
 		{
 			for (i in 0...event[1].length)
 			{
-				if (event[0] >= startingPoint + offsetStart)
+				if (event[0] >= chartStartTime)
 				{
-					var newEventNote:Array<Dynamic> = [event[0], event[1][i][0], event[1][i][1], event[1][i][2]];
+					final eventValues = event[1][i];
 					var subEvent:EventNote = {
-						strumTime: newEventNote[0] + ClientPrefs.noteOffset,
-						event: newEventNote[1],
-						value1: newEventNote[2],
-						value2: newEventNote[3]
+						strumTime: event[0] + ClientPrefs.noteOffset,
+						event: eventValues[0],
+						value1: eventValues[1],
+						value2: eventValues[2]
 					};
 					eventNotes.push(subEvent);
 					eventPushed(subEvent);
@@ -2508,6 +2585,8 @@ class PlayState extends MusicBeatState
 		var gottaHitNote:Bool = false;
 		var swagNote:PreloadedChartNote;
 		var ghostNotesCleared:Int = 0;
+		var lastCheckedNoteSkin:String = null;
+		final jackCount:Int = jackingtime > 0 ? Std.int(jackingtime) : 0;
 		// TODO: Optimize and clean up this mess, maybe split into functions
 		// this is absolute spaghetti code
 		for (section in noteData) {
@@ -2520,24 +2599,42 @@ class PlayState extends MusicBeatState
 			{
 				final songNotes:Array<Dynamic> = section.sectionNotes[i];
 
-				if (songNotes[1] == -1)
+				// Normalize dynamic chart fields once per source note. These values
+				// are reused by note generation, ownership, sustain expansion and stats.
+				final rawStrumTime:Float = songNotes[0];
+				final rawLane:Dynamic = songNotes[1];
+				final rawSustainLength:Float = songNotes[2];
+				final rawNoteType:Dynamic = songNotes[3];
+
+				if (rawLane == -1)
 					continue;
 
-				if (songNotes[0] >= startingPoint + offsetStart) {
-					final daStrumTime:Float = songNotes[0];
+				if (rawStrumTime >= chartStartTime) {
+					final daStrumTime:Float = rawStrumTime;
+					// Resolve dynamic chart metadata once per source note. Its sustain
+					// segments and optional jack notes reuse these values.
+					final noteTypeIsString:Bool = Std.isOfType(rawNoteType, String);
+					final noteTypeIsBool:Bool = Std.isOfType(rawNoteType, Bool);
+					final hurtNote:Bool = rawNoteType == 'Hurt Note';
+					final gfSingNote:Bool = rawNoteType == 'GF Sing';
+					final noAnimationNote:Bool = rawNoteType == 'No Animation';
+					final altAnimationNote:Bool = rawNoteType == 'Alt Animation';
+					final noteTypeName:Dynamic = noteTypeIsString ? rawNoteType : ChartingState.noteTypeList[rawNoteType];
+					final normalAnimSuffix:String = (altAnimationNote || section.altAnim) ? '-alt' : '';
+					final noteAnimSuffix:String = (normalAnimSuffix != '' || (noteTypeIsBool && rawNoteType == true)) ? '-alt' : '';
 					var daNoteData:Int = 0;
 					if (!assignedFirstData && oneK)
 					{
-						firstNoteData = Std.int(songNotes[1] % 4);
+						firstNoteData = Std.int(rawLane % 4);
 						assignedFirstData = true;
 					}
-					if (!randomMode && !flip && !stairs && !waves) daNoteData = Std.int(songNotes[1] % 4);
+					if (!randomMode && !flip && !stairs && !waves) daNoteData = Std.int(rawLane % 4);
 
 					if (oneK) daNoteData = firstNoteData;
 
 					if (randomMode) daNoteData = FlxG.random.int(0, 3);
 
-					if (flip) daNoteData = Std.int(Math.abs((songNotes[1] % 4) - 3));
+					if (flip) daNoteData = Std.int(Math.abs((rawLane % 4) - 3));
 
 					if (stairs && !waves) {
 						daNoteData = stair % 4;
@@ -2556,36 +2653,35 @@ class PlayState extends MusicBeatState
 						stair++;
 					}
 
-					gottaHitNote = (!opponentChart ? songNotes[1] < 4 : songNotes[1] > 3) ? section.mustHitSection : !section.mustHitSection;
+					gottaHitNote = (!opponentChart ? rawLane < 4 : rawLane > 3) ? section.mustHitSection : !section.mustHitSection;
 
-					if ((bothSides || gottaHitNote) && songNotes[3] != 'Hurt Note') {
+					if ((bothSides || gottaHitNote) && rawNoteType != 'Hurt Note') {
 						totalNotes += 1;
 					}
 					if (!bothSides && !gottaHitNote) {
 						opponentNoteTotal += 1;
 					}
 
-					if (daStrumTime >= charChangeTimes[0])
+					if (charChangeIndex < charChangeTimes.length && daStrumTime >= charChangeTimes[charChangeIndex])
 					{
-						switch (charChangeTypes[0])
+						switch (charChangeTypes[charChangeIndex])
 						{
 							case 0:
-								var boyfriendToGrab:Boyfriend = boyfriendMap.get(charChangeNames[0]);
+								var boyfriendToGrab:Boyfriend = boyfriendMap.get(charChangeNames[charChangeIndex]);
 								if (boyfriendToGrab != null) bfNoteskin = boyfriendToGrab.noteskin;
 							case 1:
-								var dadToGrab:Character = dadMap.get(charChangeNames[0]);
+								var dadToGrab:Character = dadMap.get(charChangeNames[charChangeIndex]);
 								if (dadToGrab != null) dadNoteskin = dadToGrab.noteskin;
 						}
-						charChangeTimes.shift();
-						charChangeNames.shift();
-						charChangeTypes.shift();
+						charChangeIndex++;
 					}
+					// Resolve the skin after any character-change event at this time.
+					final noteSkinName:String = gottaHitNote ? bfNoteskin : dadNoteskin;
 
-					if (multiChangeEvents[0].length > 0 && daStrumTime >= multiChangeEvents[0][0])
+					if (multiChangeIndex < multiChangeEvents[0].length && daStrumTime >= multiChangeEvents[0][multiChangeIndex])
 					{
-						currentMultiplier = multiChangeEvents[1][0];
-						multiChangeEvents[0].shift();
-						multiChangeEvents[1].shift();
+						currentMultiplier = multiChangeEvents[1][multiChangeIndex];
+						multiChangeIndex++;
 					}
 
 					swagNote = {
@@ -2593,44 +2689,48 @@ class PlayState extends MusicBeatState
 						noteData: daNoteData,
 						mustPress: bothSides || gottaHitNote,
 						oppNote: (opponentChart ? gottaHitNote : !gottaHitNote),
-						noteType: songNotes[3],
-						animSuffix: (songNotes[3] == 'Alt Animation' || section.altAnim ? '-alt' : ''),
-						noteskin: (gottaHitNote ? bfNoteskin : dadNoteskin),
-						gfNote: songNotes[3] == 'GF Sing' || (section.gfSection && songNotes[1] < 4),
-						noAnimation: songNotes[3] == 'No Animation',
-						noMissAnimation: songNotes[3] == 'No Animation',
-						sustainLength: songNotes[2],
+						noteType: noteTypeName,
+						animSuffix: noteAnimSuffix,
+						noteskin: noteSkinName,
+						gfNote: gfSingNote || (section.gfSection && rawLane < 4),
+						noAnimation: noAnimationNote,
+						noMissAnimation: noAnimationNote,
+						sustainLength: rawSustainLength,
 						hitHealth: 0.023,
-						missHealth: songNotes[3] != 'Hurt Note' ? 0.0475 : 0.3,
+						missHealth: !hurtNote ? 0.0475 : 0.3,
 						wasHit: false,
-						hitCausesMiss: songNotes[3] == 'Hurt Note',
+						hitCausesMiss: hurtNote,
 						multSpeed: 1,
 						multAlpha: 1,
 						noteDensity: currentMultiplier,
-						ignoreNote: songNotes[3] == 'Hurt Note' && gottaHitNote
+						ignoreNote: hurtNote && gottaHitNote
 					};
-					if (swagNote.noteskin.length > 0 && !Paths.noteSkinFramesMap.exists(swagNote.noteskin)) inline Paths.initNote(swagNote.noteskin);
-
-					if(!Std.isOfType(songNotes[3], String)) swagNote.noteType = ChartingState.noteTypeList[songNotes[3]]; //Backward compatibility + compatibility with Week 7 charts
-
-					if(Std.isOfType(songNotes[3], Bool)) swagNote.animSuffix = (songNotes[3] || section.altAnim ? '-alt' : ''); //Compatibility with charts made by SNIFF
-
-					if (!noteTypeMap.exists(swagNote.noteType)) {
-						noteTypeMap.set(swagNote.noteType, true);
+					// Charts usually keep the same skin for long runs of notes. Only
+					// query/initialize the skin map when that skin actually changes.
+					if (noteSkinName != lastCheckedNoteSkin)
+					{
+						lastCheckedNoteSkin = noteSkinName;
+						if (!mobile.MobileOptimization.usePixelNoteSkin(isPixelStage) &&
+							noteSkinName.length > 0 && !Paths.noteSkinFramesMap.exists(noteSkinName))
+							inline Paths.initNote(noteSkinName);
 					}
+
+					// The map is only used as a set of unique note types; setting an
+					// existing key is cheaper than a separate exists() lookup.
+					noteTypeMap.set(swagNote.noteType, true);
 
 					unspawnNotes.push(swagNote);
 
-					if (jackingtime > 0) {
-						for (j in 0...Std.int(jackingtime)) {
+					if (jackCount > 0) {
+						for (j in 0...jackCount) {
 							final jackNote:PreloadedChartNote = {
 								strumTime: swagNote.strumTime + (15000 / SONG.bpm) * (j + 1),
 								noteData: swagNote.noteData,
 								mustPress: swagNote.mustPress,
 								oppNote: swagNote.oppNote,
 								noteType: swagNote.noteType,
-								animSuffix: (songNotes[3] == 'Alt Animation' || section.altAnim ? '-alt' : ''),
-								noteskin: (gottaHitNote ? bfNoteskin : dadNoteskin),
+								animSuffix: normalAnimSuffix,
+								noteskin: noteSkinName,
 								gfNote: swagNote.gfNote,
 								isSustainNote: false,
 								isSustainEnd: false,
@@ -2658,31 +2758,31 @@ class PlayState extends MusicBeatState
 								noteData: daNoteData,
 								mustPress: bothSides || gottaHitNote,
 								oppNote: (opponentChart ? gottaHitNote : !gottaHitNote),
-								noteType: songNotes[3],
-								animSuffix: (songNotes[3] == 'Alt Animation' || section.altAnim ? '-alt' : ''),
-								noteskin: (gottaHitNote ? bfNoteskin : dadNoteskin),
-								gfNote: songNotes[3] == 'GF Sing' || (section.gfSection && songNotes[1] < 4),
-								noAnimation: songNotes[3] == 'No Animation',
+								noteType: rawNoteType,
+								animSuffix: normalAnimSuffix,
+								noteskin: noteSkinName,
+								gfNote: swagNote.gfNote,
+								noAnimation: noAnimationNote,
 								isSustainNote: true,
 								isSustainEnd: susNote == roundSus,
 								parentST: swagNote.strumTime,
 								parentSL: swagNote.sustainLength,
 								hitHealth: 0.023,
-								missHealth: songNotes[3] != 'Hurt Note' ? 0.0475 : 0.1,
+								missHealth: !hurtNote ? 0.0475 : 0.1,
 								wasHit: false,
 								multSpeed: 1,
 								multAlpha: 1,
 								noteDensity: currentMultiplier,
-								hitCausesMiss: songNotes[3] == 'Hurt Note',
-								ignoreNote: songNotes[3] == 'Hurt Note' && swagNote.mustPress
+								hitCausesMiss: hurtNote,
+								ignoreNote: hurtNote && swagNote.mustPress
 							};
 							unspawnNotes.push(sustainNote);
 						}
 					}
 				} else {
-					final gottaHitNote:Bool = ((songNotes[1] < 4 && !opponentChart)
-						|| (songNotes[1] > 3 && opponentChart) ? section.mustHitSection : !section.mustHitSection);
-					if ((bothSides || gottaHitNote) && songNotes[3] != 'Hurt Note') {
+					final gottaHitNote:Bool = ((rawLane < 4 && !opponentChart)
+						|| (rawLane > 3 && opponentChart) ? section.mustHitSection : !section.mustHitSection);
+					if ((bothSides || gottaHitNote) && rawNoteType != 'Hurt Note') {
 						totalNotes += 1;
 						combo += 1;
 						totalNotesPlayed += 1;
@@ -2713,15 +2813,19 @@ class PlayState extends MusicBeatState
 				}
 		}
 		// trace('["${SONG.song.toUpperCase()}" CHART INFO]: Ghost Notes Cleared: $ghostNotesCleared');
-		unspawnNotes.sort(sortByTime);
-		eventNotes.sort(sortByTime);
+		sortChartNotesAdaptive();
+		if (!eventNotesAreSorted()) eventNotes.sort(sortByTime);
 		generatedMusic = true;
 
 		sectionsLoaded = 0;
 
 		final endTime = haxe.Timer.stamp();
 
+		// A forced full collection here pauses the chart transition after all data
+		// is prepared. Mobile can reclaim temporary parser data incrementally.
+		#if !mobile
 		System.gc();
+		#end
 
 		final elapsedTime = endTime - startTime;
 
@@ -2804,9 +2908,97 @@ class PlayState extends MusicBeatState
 		return 0;
 	}
 
+	private function sortChartNotesAdaptive():Void
+	{
+		final length:Int = unspawnNotes.length;
+		if (length < 2) return;
+
+		// Find already-sorted runs. The common chart path exits after one
+		// linear scan; a few out-of-order runs are merged stably in O(n log r).
+		final runBounds:Array<Int> = [0];
+		var i:Int = 1;
+		while (i < length)
+		{
+			if (unspawnNotes[i - 1].strumTime > unspawnNotes[i].strumTime)
+			{
+				runBounds.push(i);
+				// Many runs: use the engine's general-purpose sort instead.
+				if (runBounds.length > 8)
+				{
+					unspawnNotes.sort(sortByTime);
+					return;
+				}
+			}
+			i++;
+		}
+
+		if (runBounds.length == 1) return;
+		runBounds.push(length);
+
+		final buffer:Array<PreloadedChartNote> = [];
+		buffer.resize(length);
+		var bounds:Array<Int> = runBounds;
+		while (bounds.length > 2)
+		{
+			final nextBounds:Array<Int> = [bounds[0]];
+			var run:Int = 0;
+			while (run < bounds.length - 1)
+			{
+				if (run + 2 < bounds.length)
+				{
+					final start:Int = bounds[run];
+					final middle:Int = bounds[run + 1];
+					final end:Int = bounds[run + 2];
+					var left:Int = start;
+					var right:Int = middle;
+					var write:Int = start;
+
+					// <= keeps equal-time notes in their original chart order.
+					while (left < middle && right < end)
+					{
+						if (unspawnNotes[left].strumTime <= unspawnNotes[right].strumTime)
+							buffer[write++] = unspawnNotes[left++];
+						else
+							buffer[write++] = unspawnNotes[right++];
+					}
+					while (left < middle) buffer[write++] = unspawnNotes[left++];
+					while (right < end) buffer[write++] = unspawnNotes[right++];
+
+					var copy:Int = start;
+					while (copy < end)
+					{
+						unspawnNotes[copy] = buffer[copy];
+						copy++;
+					}
+					nextBounds.push(end);
+					run += 2;
+				}
+				else
+				{
+					nextBounds.push(bounds[run + 1]);
+					run++;
+				}
+			}
+			bounds = nextBounds;
+		}
+	}
+
+	private function eventNotesAreSorted():Bool
+	{
+		var i:Int = 1;
+		while (i < eventNotes.length)
+		{
+			if (eventNotes[i - 1].strumTime > eventNotes[i].strumTime) return false;
+			i++;
+		}
+		return true;
+	}
+
 	function sortByTime(Obj1:Dynamic, Obj2:Dynamic):Int
 	{
-		return FlxSort.byValues(FlxSort.ASCENDING, Obj1.strumTime, Obj2.strumTime);
+		final timeA:Float = Obj1.strumTime;
+		final timeB:Float = Obj2.strumTime;
+		return timeA < timeB ? -1 : (timeA > timeB ? 1 : 0);
 	}
 
 	function sortByShit(Obj1:Note, Obj2:Note):Int {
@@ -2984,6 +3176,18 @@ class PlayState extends MusicBeatState
 
 	var noteLimit = ClientPrefs.maxNotes;
 	var limitNC = 0;
+	// Large note groups do not need a full draw-order repair on every frame.
+	var noteSortFrame:Int = 0;
+	// Without modchart scripts, active notes keep their relative Y order during
+	// normal playback. Re-sort only after membership or scroll-order changes.
+	// Scripted charts retain the periodic sort because scripts may move notes.
+	var noteSortDirty:Bool = true;
+	var lastNoteSortOrder:Int = -1;
+	// Reused lane buckets avoid quadratic cross-lane moves when dense charts append
+	// notes in time order but with mixed note directions.
+	var noteSortBuckets:Array<Array<Note>> = [[], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []];
+	// Reused merge buffer: only grows when a lane reaches a new high-water mark.
+	var noteSortScratch:Array<Note> = [];
 	public var amountOfRenderedNotes:Float = 0;
 	public var maxRenderedNotes:Float = 0;
 	public var skippedCount:Float = 0;
@@ -3006,6 +3210,83 @@ class PlayState extends MusicBeatState
 	var energyDrainSpeed:Float = 1;
 	var energyRefillSpeed:Float = 1;
 
+	private inline function updateCrossFadeGroup(group:FlxTypedGroup<CrossFade>, elapsed:Float):Void
+	{
+		if (group.length > 0)
+		{
+			group.active = true;
+			group.update(elapsed);
+
+			// Remove dead members with a reverse indexed pass, avoiding a closure
+			// allocation and keeping splice-based removal safe.
+			final members:Array<CrossFade> = group.members;
+			var i:Int = members.length - 1;
+			while (i >= 0)
+			{
+				final item:CrossFade = members[i];
+				if (item != null && !item.alive) group.remove(item, true);
+				i--;
+			}
+		}
+		group.active = false;
+	}
+
+	private function syncMotionBlurShader(elapsed:Float):Void
+	{
+		if (camGame == null) return;
+
+		final scrollX:Float = camGame.scroll.x;
+		final scrollY:Float = camGame.scroll.y;
+		final cameraMotionX:Float = motionBlurHasLastScroll ? motionBlurLastScrollX - scrollX : 0.0;
+		final cameraMotionY:Float = motionBlurHasLastScroll ? motionBlurLastScrollY - scrollY : 0.0;
+
+		motionBlurLastScrollX = scrollX;
+		motionBlurLastScrollY = scrollY;
+		motionBlurHasLastScroll = true;
+
+		if (!ClientPrefs.motionBlur || !ClientPrefs.shaders)
+		{
+			if (motionBlurShaderAttached && motionBlurShader != null)
+			{
+				camGame.removeShader(motionBlurShader);
+				motionBlurShaderAttached = false;
+			}
+			return;
+		}
+
+		if (motionBlurShader == null)
+			motionBlurShader = new MotionBlurShader();
+
+		final musicPlaying:Bool = FlxG.sound.music != null && FlxG.sound.music.playing;
+		final safeElapsed:Float = Math.max(0.0, Math.min(0.05, elapsed));
+		final strength:Float = Math.max(0.0, Math.min(12.0, ClientPrefs.motionBlurStrength));
+
+		// FNF notes travel roughly 450 * songSpeed game pixels per second.
+		// Combine that vertical movement with camera movement so the blur tracks
+		// the visible motion instead of leaving a permanent static smear.
+		var noteMotionY:Float = 0.0;
+		if (musicPlaying && generatedMusic && !endingSong)
+		{
+			final travel:Float = Math.min(30.0, Math.abs(songSpeed) * safeElapsed * 450.0);
+			noteMotionY = ClientPrefs.downScroll ? travel : -travel;
+		}
+
+		final motionX:Float = cameraMotionX;
+		final motionY:Float = cameraMotionY + noteMotionY;
+		final shouldAttach:Bool = musicPlaying && motionBlurShader.setMotion(motionX, motionY, strength, ClientPrefs.motionBlurQuality);
+
+		if (shouldAttach && !motionBlurShaderAttached)
+		{
+			camGame.addShader(motionBlurShader);
+			motionBlurShaderAttached = true;
+		}
+		else if (!shouldAttach && motionBlurShaderAttached)
+		{
+			camGame.removeShader(motionBlurShader);
+			motionBlurShaderAttached = false;
+		}
+	}
+
 	override public function update(elapsed:Float)
 	{
 		#if mobile
@@ -3013,25 +3294,14 @@ class PlayState extends MusicBeatState
 		if (mobile.MobileControls.instance != null)
 			mobile.MobileControls.instance.cutsceneMode = inCutscene;
 		#end
-		grpCrossFade.update(elapsed);
-		grpCrossFade.forEachDead(function(img:CrossFade)
-		{
-			grpCrossFade.remove(img, true);
-		});
-
-		grpGFCrossFade.update(elapsed);
-		grpGFCrossFade.forEachDead(function(img:CrossFade)
-		{
-			grpGFCrossFade.remove(img, true);
-		});
-
-		grpBFCrossFade.update(elapsed);
-		grpBFCrossFade.forEachDead(function(img:CrossFade)
-		{
-			grpBFCrossFade.remove(img, true);
-		});
+		// Update each CrossFade group exactly once. They are inactive as children,
+		// so super.update below will not traverse or update them a second time.
+		updateCrossFadeGroup(grpCrossFade, elapsed);
+		updateCrossFadeGroup(grpGFCrossFade, elapsed);
+		updateCrossFadeGroup(grpBFCrossFade, elapsed);
 
 		if (ffmpegMode) elapsed = 1 / ClientPrefs.targetFPS;
+		syncMotionBlurShader(elapsed);
 		if (screenshader.enabled)
 		{
 			if(disableTheTripperAt <= curStep || isDead)
@@ -3100,15 +3370,34 @@ class PlayState extends MusicBeatState
 			}
 		}
 
-		if (botEnergy > 0.2 && botEnergy < 1.8) energyBar.color = energyTxt.color = 0xFF0094FF;
-		if (botEnergy < 0.2) energyBar.color = energyTxt.color = 0xFFC60000;
-		if (botEnergy > 1.8) energyBar.color = energyTxt.color = 0xFF00BC12;
+		// Avoid regenerating the HUD text bitmap and dirtying display properties
+		// every frame when Bot Energy is unchanged.
+		final energyColor:FlxColor = botEnergy > 1.8 ? 0xFF00BC12 : (botEnergy < 0.2 ? 0xFFC60000 : 0xFF0094FF);
+		if (energyBar.color != energyColor) energyBar.color = energyColor;
+		if (energyTxt.color != energyColor) energyTxt.color = energyColor;
 
-		energyTxt.text = (botEnergy < 2 ? FlxMath.roundDecimal(botEnergy * 50, 0) + '%' : 'Full');
-		energyTxt.y = (FlxG.height / 1.3) - (botEnergy * 50 * 4);
+		final energyText:String = botEnergy < 2 ? FlxMath.roundDecimal(botEnergy * 50, 0) + '%' : 'Full';
+		if (energyTxt.text != energyText) energyTxt.text = energyText;
 
-		callOnLuas('onUpdate', [elapsed]);
+		final energyY:Float = (FlxG.height / 1.3) - (botEnergy * 50 * 4);
+		if (energyTxt.y != energyY) energyTxt.y = energyY;
+
+		#if LUA_ALLOWED
+		if (luaArray.length > 0) callOnLuas('onUpdate', [elapsed]);
+		#end
 		super.update(elapsed);
+
+		#if mobile
+		// Note.update normally runs through FlxTypedGroup.update. The groups are
+		// inactive on mobile to avoid that generic callback traversal; reproduce
+		// the same alive/active checks with tight indexed loops instead. Botplay's
+		// Note.update exits immediately, so skip the entire pass while cpuControlled.
+		if (ClientPrefs.fastMobileNoteUpdates && !cpuControlled)
+		{
+			updateMobileNoteGroup(sustainNotes, activeSustainChartNotes, elapsed);
+			updateMobileNoteGroup(notes, activeChartNotes, elapsed);
+		}
+		#end
 
 		if (tankmanAscend && curStep > 895 && curStep < 1151) camGame.zoom = 0.8;
 
@@ -3126,47 +3415,38 @@ class PlayState extends MusicBeatState
 				}
 			}
 		}
-		if (ClientPrefs.showNPS && (notesHitDateArray.length > 0 || oppNotesHitDateArray.length > 0)) {
-			// hits are stored in time order, so stop at the first one that is still inside the window
-			notesToRemoveCount = 0;
-			var i = 0;
+		if (ClientPrefs.showNPS && (notesHitStartIndex < notesHitDateArray.length || oppNotesHitStartIndex < oppNotesHitDateArray.length)) {
+			// Histories are appended in hit-time order. Advance cursors instead of
+			// Array.splice(0, n), which copied every surviving sample on each frame.
 			final npsWindow:Float = 1000 * npsSpeedMult;
+			final currentSongPosition:Float = Conductor.songPosition;
 
-			while (i < notesHitDateArray.length) {
-				if (!Math.isNaN(notesHitDateArray[i]) && (notesHitDateArray[i] + npsWindow < Conductor.songPosition)) {
-					npsSum -= notesHitArray[i];
-					notesToRemoveCount++;
+			while (notesHitStartIndex < notesHitDateArray.length)
+			{
+				final hitDate:Float = notesHitDateArray[notesHitStartIndex];
+				if (!Math.isNaN(hitDate) && hitDate + npsWindow < currentSongPosition)
+				{
+					npsSum -= notesHitArray[notesHitStartIndex];
+					notesHitStartIndex++;
 				}
 				else break;
-				i++;
 			}
-
-			if (notesToRemoveCount > 0) {
-				notesHitDateArray.splice(0, notesToRemoveCount);
-				notesHitArray.splice(0, notesToRemoveCount);
-			}
+			notesHitStartIndex = compactNpsHistory(notesHitArray, notesHitDateArray, notesHitStartIndex);
 			if (notesHitArray.length == 0) npsSum = 0;
-
 			nps = npsSum;
 
-			oppNotesToRemoveCount = 0;
-			i = 0;
-
-			while (i < oppNotesHitDateArray.length) {
-				if (!Math.isNaN(oppNotesHitDateArray[i]) && (oppNotesHitDateArray[i] + npsWindow < Conductor.songPosition)) {
-					oppNpsSum -= oppNotesHitArray[i];
-					oppNotesToRemoveCount++;
+			while (oppNotesHitStartIndex < oppNotesHitDateArray.length)
+			{
+				final hitDate:Float = oppNotesHitDateArray[oppNotesHitStartIndex];
+				if (!Math.isNaN(hitDate) && hitDate + npsWindow < currentSongPosition)
+				{
+					oppNpsSum -= oppNotesHitArray[oppNotesHitStartIndex];
+					oppNotesHitStartIndex++;
 				}
 				else break;
-				i++;
 			}
-
-			if (oppNotesToRemoveCount > 0) {
-				oppNotesHitDateArray.splice(0, oppNotesToRemoveCount);
-				oppNotesHitArray.splice(0, oppNotesToRemoveCount);
-			}
+			oppNotesHitStartIndex = compactNpsHistory(oppNotesHitArray, oppNotesHitDateArray, oppNotesHitStartIndex);
 			if (oppNotesHitArray.length == 0) oppNpsSum = 0;
-
 			oppNPS = oppNpsSum;
 
 			if (oppNPS > maxOppNPS) {
@@ -3182,7 +3462,7 @@ class PlayState extends MusicBeatState
 		if (scoreTxtUpdateFrame > 0) scoreTxtUpdateFrame = 0;
 		if (popUpsFrame > 0) popUpsFrame = 0;
 		if (missRecalcsPerFrame > 0) missRecalcsPerFrame = 0;
-		strumsHit = [false, false, false, false, false, false, false, false];
+		for (i in 0...strumsHit.length) strumsHit[i] = false;
 		for (i in 0...splashesPerFrame.length)
 			if (splashesPerFrame[i] > 0) splashesPerFrame[i] = 0;
 
@@ -3384,9 +3664,10 @@ class PlayState extends MusicBeatState
 
 		skippedCount = 0;
 
-		final profT0:Float = haxe.Timer.stamp();
+		final profileNotes:Bool = ClientPrefs.showRendered;
+		final profT0:Float = profileNotes ? haxe.Timer.stamp() : 0;
 		spawnNotes();
-		profSpawn = (haxe.Timer.stamp() - profT0) * 1000;
+		if (profileNotes) profSpawn = (haxe.Timer.stamp() - profT0) * 1000;
 
 		if (generatedMusic)
 		{
@@ -3398,19 +3679,87 @@ class PlayState extends MusicBeatState
 				else if (ClientPrefs.charsAndBG) playerDance();
 
 				amountOfRenderedNotes = 0;
-				final profT1:Float = haxe.Timer.stamp();
-				notes.forEach(updateNote);
-				final profT2:Float = haxe.Timer.stamp();
-				// sorting thousands of notes by Y every frame is very slow; with that many notes the draw order is not visible, so sort every 4th frame
-				sortFrame++;
-				final doSort:Bool = sortFrame % 4 == 0;
-				if (notes.length > 1 && (notes.length <= 400 || doSort))
-					notes.sort(sortByLaneThenY, ClientPrefs.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING);
-				sustainNotes.forEach(updateNote);
-				if (sustainNotes.length > 1 && (sustainNotes.length <= 400 || doSort))
-					sustainNotes.sort(sortByLaneThenY, ClientPrefs.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING);
-				profUpdate = (profT2 - profT1) * 1000;
-				profSort = (haxe.Timer.stamp() - profT2) * 1000 - 0;
+				final profT1:Float = profileNotes ? haxe.Timer.stamp() : 0;
+
+				// Keep gameplay callbacks in the same render-group order as before.
+				final noteMembers:Array<Note> = notes.members;
+				final noteLength:Int = notes.length;
+				var noteIndex:Int = 0;
+				while (noteIndex < noteLength)
+				{
+					updateNote(noteMembers[noteIndex]);
+					noteIndex++;
+				}
+				final profT2:Float = profileNotes ? haxe.Timer.stamp() : 0;
+
+				final sustainMembers:Array<Note> = sustainNotes.members;
+				final sustainLength:Int = sustainNotes.length;
+				noteIndex = 0;
+				while (noteIndex < sustainLength)
+				{
+					updateNote(sustainMembers[noteIndex]);
+					noteIndex++;
+				}
+				final profT3:Float = profileNotes ? haxe.Timer.stamp() : 0;
+
+				// Draw order is irrelevant while note sprites are hidden. In BotPlay
+				// this removes the entire dense-chart sorting pass when showNotes is off.
+				if (ClientPrefs.showNotes)
+				{
+					final sortOrder:Int = ClientPrefs.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING;
+					if (sortOrder != lastNoteSortOrder)
+					{
+						lastNoteSortOrder = sortOrder;
+						noteSortDirty = true;
+						noteSortFrame = 8;
+					}
+
+					final totalNotes:Int = noteLength + sustainLength;
+					final sortInterval:Int = ClientPrefs.adaptiveNoteSorting ? (totalNotes > 2000 ? 8 : (totalNotes > 400 ? 4 : 1)) : 1;
+					#if LUA_ALLOWED
+					if (luaArray.length > 0)
+					{
+						// Modcharts can change note positions between frames, so preserve
+						// the existing periodic repair path whenever Lua scripts are loaded.
+						noteSortFrame++;
+						if (noteSortFrame >= sortInterval)
+						{
+							noteSortFrame = 0;
+							if (noteLength > 1) bucketSortNotes(notes, sortOrder);
+							if (sustainLength > 1) bucketSortNotes(sustainNotes, sortOrder);
+							noteSortDirty = false;
+						}
+					}
+					else
+					#end
+					if (noteSortDirty)
+					{
+						// Without scripts, note Y positions move uniformly with song time.
+						// New/recycled notes are the only normal order-changing events.
+						// Keep the old 1/4/8-frame batching, but do not count idle frames.
+						noteSortFrame++;
+						if (noteSortFrame >= sortInterval)
+						{
+							if (noteLength > 1) bucketSortNotes(notes, sortOrder);
+							if (sustainLength > 1) bucketSortNotes(sustainNotes, sortOrder);
+							noteSortDirty = false;
+							noteSortFrame = 0;
+						}
+					}
+				}
+				else
+				{
+					// Force one fresh sort on the first visible frame after showing notes.
+					noteSortDirty = true;
+					noteSortFrame = 8;
+				}
+								final profT4:Float = profileNotes ? haxe.Timer.stamp() : 0;
+				if (profileNotes)
+				{
+					profUpdate = (profT2 - profT1) * 1000;
+					profSustain = (profT3 - profT2) * 1000;
+					profSort = (profT4 - profT3) * 1000;
+				}
 			}
 
 			destroyNotes();
@@ -3471,14 +3820,24 @@ class PlayState extends MusicBeatState
 
 		if (ClientPrefs.showRendered)
 		{
-			if (!ffmpegMode) renderedTxt.text = 'Rendered/Skipped: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(skippedCount)}/${formatNumber(maxRenderedNotes)}/${formatNumber(maxSkipped)}\nspawn ${Math.round(profSpawn * 10) / 10}ms | notes ${Math.round(profUpdate * 10) / 10}ms | sort+sus ${Math.round(profSort * 10) / 10}ms | draw ${Math.round(profDraw * 10) / 10}ms';
-			else renderedTxt.text = 'Rendered Notes: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(maxRenderedNotes)}/${formatNumber(notes.members.length + sustainNotes.members.length)}';
+			renderedStatsTimer -= elapsed;
+			if (renderedStatsTimer <= 0)
+			{
+				renderedStatsTimer = 0.25;
+				if (!ffmpegMode) renderedTxt.text = 'Rendered/Skipped: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(skippedCount)}/${formatNumber(maxRenderedNotes)}/${formatNumber(maxSkipped)}\nspawn ${Math.round(profSpawn * 10) / 10}ms (skip ${Math.round(profSkip * 10) / 10}ms) | notes ${Math.round(profUpdate * 10) / 10}ms | sustain ${Math.round(profSustain * 10) / 10}ms | sort ${Math.round(profSort * 10) / 10}ms | draw ${Math.round(profDraw * 10) / 10}ms';
+				else renderedTxt.text = 'Rendered Notes: ${formatNumber(amountOfRenderedNotes)}/${formatNumber(maxRenderedNotes)}/${formatNumber(notes.members.length + sustainNotes.members.length)}';
+			}
 		}
 
-		setOnLuas('cameraX', camFollowPos.x);
-		setOnLuas('cameraY', camFollowPos.y);
-		setOnLuas('botPlay', cpuControlled);
-		callOnLuas('onUpdatePost', [elapsed]);
+		#if LUA_ALLOWED
+		if (luaArray.length > 0)
+		{
+			setOnLuas('cameraX', camFollowPos.x);
+			setOnLuas('cameraY', camFollowPos.y);
+			setOnLuas('botPlay', cpuControlled);
+			callOnLuas('onUpdatePost', [elapsed]);
+		}
+		#end
 
 		if (shaderUpdates.length > 0)
 			for (i in shaderUpdates){
@@ -3514,42 +3873,47 @@ class PlayState extends MusicBeatState
 	{
 		switch (ClientPrefs.iconBounceType) {
 			case 'Old Psych':
-				for (i in [iconP1, iconP2])
-					i.setGraphicSize(Std.int(FlxMath.lerp(i.frameWidth, i.width, CoolUtil.boundTo(1 - (elapsed * 30 * playbackRate), 0, 1))),
-					Std.int(FlxMath.lerp(i.frameHeight, i.height, CoolUtil.boundTo(1 - (elapsed * 30 * playbackRate), 0, 1))));
+				final oldPsychLerpAmount:Float = CoolUtil.boundTo(1 - (elapsed * 30 * playbackRate), 0, 1);
+				iconP1.setGraphicSize(Std.int(FlxMath.lerp(iconP1.frameWidth, iconP1.width, oldPsychLerpAmount)),
+					Std.int(FlxMath.lerp(iconP1.frameHeight, iconP1.height, oldPsychLerpAmount)));
+				iconP2.setGraphicSize(Std.int(FlxMath.lerp(iconP2.frameWidth, iconP2.width, oldPsychLerpAmount)),
+					Std.int(FlxMath.lerp(iconP2.frameHeight, iconP2.height, oldPsychLerpAmount)));
 
 			case 'Strident Crisis':
 				iconSizeResetTime = Math.max(0, iconSizeResetTime - elapsed);
-				var iconLerp = FlxEase.quartIn(iconSizeResetTime / 0.5);
-
-				for (i in [iconP1, iconP2])
-					i.setGraphicSize(Std.int(FlxMath.lerp(i.frameWidth, i.width, iconLerp)),
-					Std.int(FlxMath.lerp(i.frameHeight, i.height, iconLerp)));
+				final iconLerp:Float = FlxEase.quartIn(iconSizeResetTime / 0.5);
+				iconP1.setGraphicSize(Std.int(FlxMath.lerp(iconP1.frameWidth, iconP1.width, iconLerp)),
+					Std.int(FlxMath.lerp(iconP1.frameHeight, iconP1.height, iconLerp)));
+				iconP2.setGraphicSize(Std.int(FlxMath.lerp(iconP2.frameWidth, iconP2.width, iconLerp)),
+					Std.int(FlxMath.lerp(iconP2.frameHeight, iconP2.height, iconLerp)));
 
 			case 'Dave and Bambi':
 				iconSizeResetTime = Math.max(0, iconSizeResetTime - elapsed / playbackRate);
-				var iconLerp = FlxEase.quartIn(iconSizeResetTime / 0.8);
-
-				for (i in [iconP1, iconP2])
-					i.setGraphicSize(Std.int(FlxMath.lerp(i.frameWidth, i.width, iconLerp)),
-					Std.int(FlxMath.lerp(i.frameHeight, i.height, iconLerp)));
+				final iconLerp:Float = FlxEase.quartIn(iconSizeResetTime / 0.8);
+				iconP1.setGraphicSize(Std.int(FlxMath.lerp(iconP1.frameWidth, iconP1.width, iconLerp)),
+					Std.int(FlxMath.lerp(iconP1.frameHeight, iconP1.height, iconLerp)));
+				iconP2.setGraphicSize(Std.int(FlxMath.lerp(iconP2.frameWidth, iconP2.width, iconLerp)),
+					Std.int(FlxMath.lerp(iconP2.frameHeight, iconP2.height, iconLerp)));
 
 			case 'Plank Engine':
 				final funnyBeat = (Conductor.songPosition / 1000) * (Conductor.bpm / 60);
-
-				for (i in [iconP1, iconP2])
-					i.offset.y = Math.abs(Math.sin(funnyBeat * Math.PI))  * 16 - 4;
+				final iconOffset:Float = Math.abs(Math.sin(funnyBeat * Math.PI)) * 16 - 4;
+				iconP1.offset.y = iconOffset;
+				iconP2.offset.y = iconOffset;
 
 			case 'New Psych', 'VS Steve':
-				for (i in [iconP1, iconP2]) {
-					final mult:Float = FlxMath.lerp(1, i.scale.x, CoolUtil.boundTo(1 - (elapsed * 9 * playbackRate), 0, 1));
-					i.scale.set(mult, mult);
-				}
+				final newPsychLerpAmount:Float = CoolUtil.boundTo(1 - (elapsed * 9 * playbackRate), 0, 1);
+				final multP1:Float = FlxMath.lerp(1, iconP1.scale.x, newPsychLerpAmount);
+				final multP2:Float = FlxMath.lerp(1, iconP2.scale.x, newPsychLerpAmount);
+				iconP1.scale.set(multP1, multP1);
+				iconP2.scale.set(multP2, multP2);
+				iconP1.updateHitbox();
+				iconP2.updateHitbox();
 		}
 
-		for (i in [iconP1, iconP2]) {
-			if (ClientPrefs.iconBounceType == 'Golden Apple') i.centerOffsets();
-			i.updateHitbox();
+		if (ClientPrefs.iconBounceType == 'Golden Apple') {
+			iconP1.centerOffsets();
+			iconP2.centerOffsets();
 		}
 	}
 
@@ -4541,13 +4905,44 @@ class PlayState extends MusicBeatState
 	}
 
 	public function KillNotes() {
-		for (group in [notes, sustainNotes]){
-			if (group != null){
-				while (group.length > 0) {
-					group.remove(group.members[0], true);
-				}
+		// All currently spawned notes are removed below.
+		limitNC = 0;
+		for (note in activeChartNotes) if (note != null) note.activeListIndex = -1;
+		for (note in activeSustainChartNotes) if (note != null) note.activeListIndex = -1;
+		activeChartNotes.resize(0);
+		activeSustainChartNotes.resize(0);
+		if (notes != null)
+		{
+			for (note in notes.members)
+			{
+				if (note == null) continue;
+				note.countsTowardLimit = false;
+				note.inNoteGroup = false;
+				note.inFreeNotePool = false;
+				note.activeListIndex = -1;
+				note.kill();
 			}
+			// remove(note, true) searches and shifts the array for every member.
+			// One clear pass makes large seek/restart cleanups linear instead.
+			notes.clear();
 		}
+		if (sustainNotes != null)
+		{
+			for (note in sustainNotes.members)
+			{
+				if (note == null) continue;
+				note.countsTowardLimit = false;
+				note.inNoteGroup = false;
+				note.inFreeNotePool = false;
+				note.activeListIndex = -1;
+				note.kill();
+			}
+			sustainNotes.clear();
+		}
+		// Notes removed by a seek/loop are no longer group members. Drop their
+		// old pool entries; queued kills can safely repopulate the lists later.
+		freeNotes.resize(0);
+		freeSustainNotes.resize(0);
 		//unspawnNotes = [];
 		//eventNotes = [];
 	}
@@ -4692,7 +5087,7 @@ class PlayState extends MusicBeatState
 				var tempCombo:Float = (combo > 0 ? combo : -combo);
 				var tempComboAlt:Float = tempCombo;
 
-				separatedScore = [];
+				separatedScore.resize(0);
 				while(tempCombo >= 10)
 				{
 					separatedScore.unshift(Math.ffloor(tempCombo / 10) % 10);
@@ -4770,40 +5165,79 @@ class PlayState extends MusicBeatState
 
 		var canMiss:Bool = !ClientPrefs.ghostTapping;
 
-		// obtain notes that the player can hit
-		var plrInputNotes:Array<Note> = notes.members.filter(function(n:Note):Bool {
-			var canHit:Bool = !usingBotEnergy && !strumsBlocked[n.noteData] && n.canBeHit && n.mustPress && !n.tooLate && !n.wasGoodHit && !n.blockHit;
-			// trace('[keyPressed] Note? ${n != null}, noteData=${n.noteData}, strumTime=${n.strumTime}, canHit=$canHit, mustPress=${n.mustPress}, tooLate=${n.tooLate}, wasGoodHit=${n.wasGoodHit}, Conductor=${Conductor.songPosition}');
-			return n != null && n.exists && canHit && !n.isSustainNote && n.noteData == key;
-		});
-		plrInputNotes.sort(sortHitNotes);
+		// Find the first two hittable notes in sorted order without allocating and
+		// sorting a full array for every key press. Dense charts can have thousands of notes.
+		var firstNote:Note = null;
+		var secondNote:Note = null;
+		var hitCount:Int = 0;
+		// A blocked lane or active bot-energy input makes every candidate invalid.
+		// Check it once instead of repeating the same branch for every active note.
+		if (!usingBotEnergy && !strumsBlocked[key])
+		{
+			for (candidate in notes.members)
+			{
+				if (candidate == null || !candidate.exists || candidate.noteData != key ||
+					!candidate.canBeHit || !candidate.mustPress || candidate.tooLate || candidate.wasGoodHit ||
+					candidate.blockHit || candidate.isSustainNote) continue;
 
-		if (plrInputNotes.length != 0) {
-			var funnyNote:Note = plrInputNotes[0]; // front note
+				hitCount++;
+				if (firstNote == null || (firstNote.lowPriority && !candidate.lowPriority) ||
+					(firstNote.lowPriority == candidate.lowPriority && candidate.strumTime < firstNote.strumTime))
+				{
+					secondNote = firstNote;
+					firstNote = candidate;
+				}
+				else if (secondNote == null || (secondNote.lowPriority && !candidate.lowPriority) ||
+					(secondNote.lowPriority == candidate.lowPriority && candidate.strumTime < secondNote.strumTime))
+				{
+					secondNote = candidate;
+				}
+			}
+		}
 
-			if (plrInputNotes.length > 1) {
-				var doubleNote:Note = plrInputNotes[1];
+		// ezSpam intentionally hits the entire sorted lane; build that list before
+		// hit callbacks mutate note state. The normal path never allocates this array.
+		var spamNotes:Array<Note> = null;
+		if (hitCount > 2 && ClientPrefs.ezSpam)
+		{
+			spamNotes = [];
+			for (candidate in notes.members)
+			{
+				if (candidate != null && candidate.exists && candidate.noteData == key &&
+					!usingBotEnergy && !strumsBlocked[key] && candidate.canBeHit && candidate.mustPress &&
+					!candidate.tooLate && !candidate.wasGoodHit && !candidate.blockHit && !candidate.isSustainNote)
+					spamNotes.push(candidate);
+			}
+			spamNotes.sort(sortHitNotes);
+		}
 
+		if (firstNote != null)
+		{
+			var funnyNote:Note = firstNote; // front note
+
+			if (secondNote != null)
+			{
+				var doubleNote:Note = secondNote;
 				//if the note has the same notedata and doOppStuff indicator as funnynote, then do the check
-				if (doubleNote.noteData == funnyNote.noteData && doubleNote.doOppStuff == funnyNote.doOppStuff) {
+				if (doubleNote.noteData == funnyNote.noteData && doubleNote.doOppStuff == funnyNote.doOppStuff)
+				{
 					// if the note has a 0ms distance (is on top of the current note), kill it
 					if (Math.abs(doubleNote.strumTime - funnyNote.strumTime) < 1.0)
 						invalidateNote(doubleNote);
 					else if (doubleNote.strumTime < funnyNote.strumTime)
-					{
-						// replace the note if its ahead of time (or at least ensure "doubleNote" is ahead)
 						funnyNote = doubleNote;
-					}
 				}
 				else goodNoteHit(doubleNote); //otherwise, hit doubleNote instead of killing it
 			}
 			goodNoteHit(funnyNote);
-			if (plrInputNotes.length > 2 && ClientPrefs.ezSpam) {
-				for (i in 1...plrInputNotes.length) goodNoteHit(plrInputNotes[i]);
-			}
+
+			if (spamNotes != null)
+				for (i in 1...spamNotes.length) goodNoteHit(spamNotes[i]);
 		}
 		else {
-			callOnLuas('onGhostTap', [key]);
+			#if LUA_ALLOWED
+			if (luaArray.length > 0) callOnLuas('onGhostTap', [key]);
+			#end
 			if (canMiss) noteMissPress(key);
 		}
 
@@ -4870,6 +5304,23 @@ class PlayState extends MusicBeatState
 		return -1;
 	}
 
+	// Check active sustain notes without creating a temporary [notes, sustainNotes] array each frame.
+	inline function checkHeldNotes(group:FlxTypedGroup<Note>):Void
+	{
+		final members:Array<Note> = group.members;
+		final length:Int = members.length;
+		var i:Int = 0;
+		while (i < length)
+		{
+			final n:Note = members[i++];
+			if (n != null && n.exists && n.mustPress && holdArray[n.noteData] &&
+				!strumsBlocked[n.noteData] && n.canBeHit && !n.tooLate && !n.wasGoodHit && !n.blockHit)
+			{
+				goodNoteHit(n);
+			}
+		}
+	}
+
 	// Hold notes
 	private function keyShit():Void
 	{
@@ -4901,25 +5352,12 @@ class PlayState extends MusicBeatState
 		if (opponentChart) char = dad;
 		if (startedCountdown && !char.stunned && generatedMusic)
 		{
-			for (group in [notes, sustainNotes]){
-				if (group.length > 0)
-				{
-					for (n in group.members)
-					{ // I can't do a filter here, that's kinda awesome
-						var canHit:Bool = (n != null && n.exists && !usingBotEnergy && !strumsBlocked[n.noteData] && n.canBeHit && n.mustPress && !n.tooLate && !n.wasGoodHit && !n.blockHit);
+			// Regular notes never contain sustain segments; only scan the sustain
+			// group, and only while a lane is actually held by the player.
+			if (strumHeldAmount > 0 && !usingBotEnergy)
+				checkHeldNotes(sustainNotes);
 
-						if (canHit && n.isSustainNote)
-						{
-							var released:Bool = !holdArray[n.noteData];
-
-							if (!released)
-								goodNoteHit(n);
-						}
-					}
-				}
-			}
-
-			if (!holdArray.contains(true) || endingSong) {
+			if (strumHeldAmount == 0 || endingSong) {
 				if (ClientPrefs.charsAndBG) playerDance();
 			}
 
@@ -5020,8 +5458,10 @@ class PlayState extends MusicBeatState
 				daNote.noteHoldSplash.kill();
 			}
 
-			stagesFunc(function(stage:BaseStage) stage.noteMiss(daNote));
-			callOnLuas('noteMiss', [(daNote.isSustainNote ? sustainNotes : notes).members.indexOf(daNote), daNote.noteData, daNote.noteType, daNote.isSustainNote]);
+			if (stages.length > 0) stagesFunc(function(stage:BaseStage) stage.noteMiss(daNote));
+			#if LUA_ALLOWED
+			if (luaArray.length > 0) callOnLuas('noteMiss', [luaNoteIndex(daNote), daNote.noteData, daNote.noteType, daNote.isSustainNote]);
+			#end
 			if (ClientPrefs.missRating && ClientPrefs.ratingPopups) popUpScore(daNote, true);
 		}
 		if (daNoteAlt != null)
@@ -5057,7 +5497,9 @@ class PlayState extends MusicBeatState
 			}
 			if (scoreTxtUpdateFrame <= 4 && scoreTxt != null) updateScore();
 
-			callOnLuas('noteMiss', [null, daNoteAlt.noteData, daNoteAlt.noteType, daNoteAlt.isSustainNote]);
+			#if LUA_ALLOWED
+			if (luaArray.length > 0) callOnLuas('noteMiss', [null, daNoteAlt.noteData, daNoteAlt.noteType, daNoteAlt.isSustainNote]);
+			#end
 		}
 	}
 
@@ -5099,7 +5541,9 @@ class PlayState extends MusicBeatState
 		if (scoreTxtUpdateFrame <= 4 && scoreTxt != null) updateScore();
 
 		stagesFunc(function(stage:BaseStage) stage.noteMissPress(direction));
-		callOnLuas('noteMissPress', [direction]);
+		#if LUA_ALLOWED
+		if (luaArray.length > 0) callOnLuas('noteMissPress', [direction]);
+		#end
 	}
 
 	//This function handles note spawning.
@@ -5108,24 +5552,237 @@ class PlayState extends MusicBeatState
 	var spawnedNote:Note;
 	var profDraw:Float = 0;
 	var profSpawn:Float = 0;
+	var profSkip:Float = 0;
 	var profUpdate:Float = 0;
+	var profSustain:Float = 0;
 	var profSort:Float = 0;
-	var sortFrame:Int = 0;
+	// Throttle debug text regeneration; profiling numbers remain sampled each frame.
+	var renderedStatsTimer:Float = 0;
 	override function draw():Void
 	{
-		final t:Float = haxe.Timer.stamp();
-		super.draw();
-		profDraw = (haxe.Timer.stamp() - t) * 1000;
+		if (ClientPrefs.showRendered)
+		{
+			final t:Float = haxe.Timer.stamp();
+			super.draw();
+			profDraw = (haxe.Timer.stamp() - t) * 1000;
+		}
+		else super.draw();
 	}
 
 	// Draw notes lane by lane (then by Y). Every lane uses its own colour shader and OpenFL starts a new draw batch each
 	// time the shader changes, so sorting by Y alone alternated shaders on almost every note (one draw call per note).
 	static function sortByLaneThenY(order:Int, a:Note, b:Note):Int
 	{
+		if (a == null) return b == null ? 0 : 1;
+		if (b == null) return -1;
 		final la:Int = a.noteData + (a.mustPress ? 8 : 0);
 		final lb:Int = b.noteData + (b.mustPress ? 8 : 0);
 		if (la != lb) return la < lb ? -1 : 1;
 		return FlxSort.byValues(order, a.y, b.y);
+	}
+
+	static inline function noteComesAfter(a:Note, b:Note, order:Int):Bool
+	{
+		if (a == null) return b != null;
+		if (b == null) return false;
+		final laneA:Int = a.noteData + (a.mustPress ? 8 : 0);
+		final laneB:Int = b.noteData + (b.mustPress ? 8 : 0);
+		if (laneA != laneB) return laneA > laneB;
+		// Avoid the generic comparator call in the per-frame insertion-sort hot path.
+		return order == FlxSort.ASCENDING ? a.y > b.y : a.y < b.y;
+	}
+
+	static function insertionSortNotes(group:FlxTypedGroup<Note>, order:Int):Void
+	{
+		final members = group.members;
+		final length:Int = members.length;
+		if (length < 2) return;
+
+		final fallbackLimit:Int = length >> 1;
+		var moves:Int = 0;
+		var i:Int = 1;
+		while (i < length)
+		{
+			final current:Note = members[i];
+
+			// Most frames have no crossing notes. Check the adjacent pair first and
+			// avoid the writes and inner-loop setup when this item is already placed.
+			if (!noteComesAfter(members[i - 1], current, order))
+			{
+				i++;
+				continue;
+			}
+
+			var j:Int = i - 1;
+			while (j >= 0 && noteComesAfter(members[j], current, order))
+			{
+				members[j + 1] = members[j];
+				j--;
+				moves++;
+				if (moves > fallbackLimit)
+				{
+					members[j + 1] = current;
+					group.sort(sortByLaneThenY, order);
+					return;
+				}
+			}
+			members[j + 1] = current;
+			i++;
+		}
+	}
+
+	private inline function noteYComesAfter(a:Note, b:Note, order:Int):Bool
+	{
+		return order == FlxSort.ASCENDING ? a.y > b.y : a.y < b.y;
+	}
+
+	/**
+	 * Keep the cheap insertion path for nearly sorted lanes, but fall back to a
+	 * stable bottom-up merge when lots of items move. This avoids quadratic
+	 * worst-case work on dense/modded charts without changing equal-Y priority.
+	 */
+	private function sortNoteBucket(bucket:Array<Note>, order:Int):Void
+	{
+		final length:Int = bucket.length;
+		if (length < 2) return;
+
+		final moveLimit:Int = length >> 1;
+		var moves:Int = 0;
+		var i:Int = 1;
+		while (i < length)
+		{
+			final current:Note = bucket[i];
+			if (!noteYComesAfter(bucket[i - 1], current, order))
+			{
+				i++;
+				continue;
+			}
+
+			var j:Int = i - 1;
+			while (j >= 0 && noteYComesAfter(bucket[j], current, order))
+			{
+				bucket[j + 1] = bucket[j];
+				j--;
+				moves++;
+				if (moves > moveLimit)
+				{
+					bucket[j + 1] = current;
+					stableMergeSortNoteBucket(bucket, order);
+					return;
+				}
+			}
+			bucket[j + 1] = current;
+			i++;
+		}
+	}
+
+	private function stableMergeSortNoteBucket(bucket:Array<Note>, order:Int):Void
+	{
+		final length:Int = bucket.length;
+		if (length < 2) return;
+
+		if (noteSortScratch.length < length)
+			noteSortScratch.resize(length);
+
+		var source:Array<Note> = bucket;
+		var target:Array<Note> = noteSortScratch;
+		var width:Int = 1;
+		while (width < length)
+		{
+			var start:Int = 0;
+			while (start < length)
+			{
+				final middle:Int = start + width < length ? start + width : length;
+				final doubleWidth:Int = width * 2;
+				final end:Int = start + doubleWidth < length ? start + doubleWidth : length;
+				var left:Int = start;
+				var right:Int = middle;
+				var write:Int = start;
+
+				while (left < middle && right < end)
+				{
+					// Select the left item on ties to preserve original lane priority.
+					if (!noteYComesAfter(source[left], source[right], order))
+						target[write++] = source[left++];
+					else
+						target[write++] = source[right++];
+				}
+				while (left < middle) target[write++] = source[left++];
+				while (right < end) target[write++] = source[right++];
+				start = end;
+			}
+
+			final temp:Array<Note> = source;
+			source = target;
+			target = temp;
+			width *= 2;
+		}
+
+		if (source != bucket)
+		{
+			var i:Int = 0;
+			while (i < length)
+			{
+				bucket[i] = source[i];
+				i++;
+			}
+		}
+	}
+
+	private function bucketSortNotes(group:FlxTypedGroup<Note>, order:Int):Void
+	{
+		final members:Array<Note> = group.members;
+		final length:Int = members.length;
+		if (length < 2) return;
+
+		final buckets:Array<Array<Note>> = noteSortBuckets;
+		var bucketIndex:Int = 0;
+		while (bucketIndex < buckets.length)
+		{
+			buckets[bucketIndex].resize(0);
+			bucketIndex++;
+		}
+
+		var nullCount:Int = 0;
+		var i:Int = 0;
+		while (i < length)
+		{
+			final note:Note = members[i];
+			if (note == null) nullCount++;
+			else
+			{
+				final lane:Int = note.noteData + (note.mustPress ? 8 : 0);
+				// Preserve support for unusual modded lane layouts outside the
+				// standard 16 buckets rather than changing their draw order.
+				if (lane < 0 || lane >= buckets.length)
+				{
+					insertionSortNotes(group, order);
+					return;
+				}
+				buckets[lane].push(note);
+			}
+			i++;
+		}
+
+		var outputIndex:Int = 0;
+		bucketIndex = 0;
+		while (bucketIndex < buckets.length)
+		{
+			final bucket:Array<Note> = buckets[bucketIndex];
+			final bucketLength:Int = bucket.length;
+			sortNoteBucket(bucket, order);
+			var memberIndex:Int = 0;
+			while (memberIndex < bucketLength)
+			{
+				members[outputIndex++] = bucket[memberIndex++];
+			}
+			bucketIndex++;
+		}
+		while (nullCount > 0)
+		{
+			members[outputIndex++] = null;
+			nullCount--;
+		}
 	}
 
 	var batchSkips:Bool = false;
@@ -5153,27 +5810,280 @@ class PlayState extends MusicBeatState
 		}
 	}
 
+	private function registerActiveChartNote(note:Note, isSustain:Bool):Void
+	{
+		if (note.activeListIndex >= 0) return;
+		final activeList:Array<Note> = isSustain ? activeSustainChartNotes : activeChartNotes;
+		note.activeListIndex = activeList.length;
+		activeList.push(note);
+	}
+
+	private function unregisterActiveChartNote(note:Note):Void
+	{
+		var activeList:Array<Note> = note.isSustainNote ? activeSustainChartNotes : activeChartNotes;
+		var index:Int = note.activeListIndex;
+		if (index < 0) return;
+
+		// Normal removal is O(1). Recover safely if an external script changed
+		// the note's sustain type or otherwise invalidated its cached index.
+		if (index >= activeList.length || activeList[index] != note)
+		{
+			index = activeList.indexOf(note);
+			if (index < 0)
+			{
+				// The note may have changed from tap to sustain (or vice versa)
+				// after registration. Search the other compact list before giving up.
+				activeList = note.isSustainNote ? activeChartNotes : activeSustainChartNotes;
+				index = activeList.indexOf(note);
+				if (index < 0)
+				{
+					note.activeListIndex = -1;
+					return;
+				}
+			}
+		}
+
+		final last:Note = activeList.pop();
+		if (index < activeList.length)
+		{
+			activeList[index] = last;
+			last.activeListIndex = index;
+		}
+		note.activeListIndex = -1;
+	}
+
+	private inline function recycleChartNote(isSustain:Bool):Note
+	{
+		final group:FlxTypedGroup<Note> = isSustain ? sustainNotes : notes;
+		final pool:Array<Note> = isSustain ? freeSustainNotes : freeNotes;
+		var note:Note;
+
+		if (pool.length > 0)
+		{
+			note = pool.pop();
+			note.inFreeNotePool = false;
+			note.revive();
+		}
+		else
+		{
+			note = new Note();
+		}
+
+		// KillNotes() removes group members during seeks/loops. Re-add pooled
+		// notes only when necessary; normal gameplay keeps them in their group.
+		if (!note.inNoteGroup)
+		{
+			group.add(note);
+			note.inNoteGroup = true;
+		}
+		registerActiveChartNote(note, isSustain);
+		// A recycled note may have a different lane/time than its previous life.
+		// Mark both mobile render groups for one stable re-sort after spawning.
+		noteSortDirty = true;
+		return note;
+	}
+
+	private inline function canFastSkipBotNotes():Bool
+	{
+		if (!ClientPrefs.batchBotplaySkips) return false;
+		if (!cpuControlled || shouldDrainHealth || opponentDrain) return false;
+		if ((boyfriend != null && boyfriend.shakeScreen) || (dad != null && dad.shakeScreen) || (gf != null && gf.shakeScreen))
+			return false;
+		#if LUA_ALLOWED
+		// Skip callbacks and score callbacks must retain their original order.
+		if (luaArray.length > 0) return false;
+		#end
+		return true;
+	}
+
+	private inline function canFastSkipBotNote(note:PreloadedChartNote):Bool
+	{
+		// These common note types have no custom skip behaviour. Keep all special
+		// note types on the original path so their exact effects are preserved.
+		return note.noteType == null || note.noteType == '' ||
+			note.noteType == 'Alt Animation' || note.noteType == 'No Animation';
+	}
+
+	// Equivalent to the two noteAlt branches of goodNoteHit/opponentNoteHit for
+	// ordinary BotPlay notes. It aggregates counters and skips repeated function
+	// dispatch while preserving the last character animation and light-strum.
+	private inline function fastSkipBotNote(note:PreloadedChartNote):Bool
+	{
+		final poly:Float = note.mustPress ? (opponentChart ? polyphonyOppo : polyphonyBF) : polyphonyOppo;
+		var refreshScore:Bool = false;
+
+		if (note.mustPress)
+		{
+			oppTrigger = opponentChart || (bothSides && note.oppNote);
+			if (!note.noAnimation && ClientPrefs.charsAndBG)
+			{
+				playerChar = !note.gfNote ? (!oppTrigger ? boyfriend : dad) : gf;
+				if (playerChar != null)
+					queueSkipAnim(1, playerChar, note.noteData, note.animSuffix);
+			}
+
+			if (!ClientPrefs.showNotes && ClientPrefs.botLightStrum)
+			{
+				final strumIndex:Int = (note.noteData % 4) + 4;
+				if (!strumsHit[strumIndex])
+				{
+					strumsHit[strumIndex] = true;
+					final strum:StrumNote = playerStrums.members[note.noteData];
+					if (strum != null)
+					{
+						strum.playAnim('confirm', true);
+						strum.resetAnim = calculateResetTime();
+					}
+				}
+			}
+
+			if (!note.isSustainNote)
+			{
+				if (combo < 0) combo = 0;
+				combo += poly;
+				songScore += (ClientPrefs.noMarvJudge ? 350 : 500) * poly;
+				totalNotesPlayed += poly;
+				if (ClientPrefs.showNPS) batchNpsGood += poly;
+				if (poly > 1) totalNotes += poly - 1;
+			}
+			health += note.hitHealth * healthGain * poly;
+		}
+		else
+		{
+			if (!note.noAnimation && ClientPrefs.charsAndBG)
+			{
+				oppChar = !note.gfNote ? (!opponentChart ? dad : boyfriend) : gf;
+				if (oppChar != null)
+					queueSkipAnim(0, oppChar, Std.int(Math.abs(note.noteData)), note.animSuffix);
+			}
+
+			if (ClientPrefs.opponentLightStrum && !strumsHit[note.noteData % 4] && !ClientPrefs.showNotes)
+			{
+				strumsHit[note.noteData % 4] = true;
+				final strum:StrumNote = opponentStrums.members[note.noteData];
+				if (strum != null)
+				{
+					strum.playAnim('confirm', true);
+					strum.resetAnim = calculateResetTime();
+				}
+			}
+
+			if (!note.isSustainNote)
+			{
+				if (ClientPrefs.showNPS) batchNpsOpp += poly;
+				enemyHits += poly;
+				refreshScore = true;
+			}
+		}
+
+		return refreshScore;
+	}
+
+	/**
+	 * Reclaim expired NPS history without shifting on every frame. A full
+	 * clear happens when all entries expire; partial compaction is amortized
+	 * and uses the existing arrays without allocating new ones.
+	 */
+	private function compactNpsHistory(values:Array<Float>, dates:Array<Float>, startIndex:Int):Int
+	{
+		final length:Int = dates.length;
+		if (startIndex <= 0) return 0;
+		if (startIndex >= length)
+		{
+			values.resize(0);
+			dates.resize(0);
+			return 0;
+		}
+
+		if (startIndex >= 512 && startIndex >= (length - startIndex))
+		{
+			var readIndex:Int = startIndex;
+			var writeIndex:Int = 0;
+			while (readIndex < length)
+			{
+				values[writeIndex] = values[readIndex];
+				dates[writeIndex] = dates[readIndex];
+				readIndex++;
+				writeIndex++;
+			}
+			values.resize(writeIndex);
+			dates.resize(writeIndex);
+			return 0;
+		}
+		return startIndex;
+	}
+
 	function spawnNotes()
 	{
+		profSkip = 0;
 		if (unspawnNotes[notesAddedCount] != null)
 		{
 			//notesAddedCount = 0;
 			NOTE_SPAWN_TIME = (ClientPrefs.dynamicSpawnTime ? (1600 / songSpeed) : 1600 * ClientPrefs.noteSpawnTime);
 			targetNote = unspawnNotes[notesAddedCount];
-			limitNC = (notes.countLiving() + sustainNotes.countLiving());
 
 			if (targetNote != null && !targetNote.wasHit)
 			{
 				batchSkips = true; // when thousands of notes are skipped in one frame only the last sing animation per side is shown
-				while (targetNote.strumTime <= Conductor.songPosition - ClientPrefs.noteOffset) {
-					targetNote.wasHit = true;
-					targetNote.mustPress ? goodNoteHit(null, targetNote) : opponentNoteHit(null, targetNote);
-					notesAddedCount++;
-					if (unspawnNotes[notesAddedCount+1] != null) targetNote = unspawnNotes[notesAddedCount];
-					else break;
-					skippedCount++;
-					if (skippedCount > maxSkipped) maxSkipped = skippedCount;
+				final fastBotSkip:Bool = canFastSkipBotNotes();
+				// All callback-free skipped hits in this batch share the same vocal
+				// routing. Restore volume once, rather than testing it for every note.
+				if (fastBotSkip && SONG.needsVoices && !ffmpegMode)
+				{
+					if (!opponentChart && opponentVocals != null && opponentVocals.volume != 1)
+						opponentVocals.volume = 1;
+					else if (vocals.volume != 1)
+						vocals.volume = 1;
 				}
+				var refreshScoreAfterFastSkips:Int = 0;
+				final skipProfileStart:Float = ClientPrefs.showRendered ? haxe.Timer.stamp() : 0;
+				// Keep the same overdue-note throughput budget in both BotPlay paths.
+				// The old 400-note fallback caused a permanent backlog whenever Lua,
+				// shake effects, or custom note callbacks disabled the fast path.
+				// At 60 FPS, 34000 notes/frame allows up to 2.04M overdue notes/second.
+				// This is a hard ceiling, not guaranteed throughput; special notes and callbacks
+				// still use the original gameplay path to preserve their behavior.
+				#if mobile
+				final maxSkippedNotesPerFrame:Int = 40000;
+				var processedSkippedNotes:Int = 0;
+				#end
+				while (targetNote.strumTime <= Conductor.songPosition - ClientPrefs.noteOffset
+					#if mobile
+					&& processedSkippedNotes < maxSkippedNotesPerFrame
+					#end
+				) {
+					#if mobile
+					processedSkippedNotes++;
+					#end
+					targetNote.wasHit = true;
+					if (fastBotSkip && canFastSkipBotNote(targetNote))
+					{
+						if (fastSkipBotNote(targetNote)) refreshScoreAfterFastSkips++;
+					}
+					else
+					{
+						targetNote.mustPress ? goodNoteHit(null, targetNote) : opponentNoteHit(null, targetNote);
+					}
+					notesAddedCount++;
+					if (unspawnNotes[notesAddedCount] != null) targetNote = unspawnNotes[notesAddedCount];
+					else break;
+					if (ClientPrefs.showRendered)
+					{
+						skippedCount++;
+						if (skippedCount > maxSkipped) maxSkipped = skippedCount;
+					}
+				}
+				// The original opponent skip path refreshed score once per eligible
+				// hit, up to five times per frame. Preserve that bound and count.
+				while (refreshScoreAfterFastSkips > 0 && scoreTxtUpdateFrame <= 4)
+				{
+					updateScore();
+					refreshScoreAfterFastSkips--;
+				}
+
+				if (ClientPrefs.showRendered)
+					profSkip = (haxe.Timer.stamp() - skipProfileStart) * 1000;
+
 				batchSkips = false;
 				flushSkipAnim(0);
 				flushSkipAnim(1);
@@ -5192,20 +6102,55 @@ class PlayState extends MusicBeatState
 					batchNpsOpp = 0;
 				}
 			}
-			if (ClientPrefs.showNotes || !ClientPrefs.showNotes && !cpuControlled)
-			{
-				while (limitNC < noteLimit && targetNote.strumTime - Conductor.songPosition < (NOTE_SPAWN_TIME / targetNote.multSpeed)) {
-					spawnedNote = (targetNote.isSustainNote ? sustainNotes : notes).recycle(Note);
-					spawnedNote.setupNoteData(targetNote);
 
-					if (!ClientPrefs.noSpawnFunc) callOnLuas('onSpawnNote', [(!spawnedNote.isSustainNote ? notes.members.indexOf(spawnedNote) : sustainNotes.members.indexOf(spawnedNote)), targetNote.noteData, targetNote.noteType, targetNote.isSustainNote]);
+			// If the overdue backlog hit its per-frame budget, do not feed the
+			// same overdue notes into the normal visual spawn loop below. That
+			// would immediately recreate the original catch-up spike.
+			if (unspawnNotes[notesAddedCount] != null)
+				targetNote = unspawnNotes[notesAddedCount];
+			final overdueBacklog:Bool = targetNote != null && !targetNote.wasHit &&
+				targetNote.strumTime <= Conductor.songPosition - ClientPrefs.noteOffset;
+
+			if (!overdueBacklog && targetNote != null &&
+				(ClientPrefs.showNotes || !ClientPrefs.showNotes && !cpuControlled))
+			{
+				// limitNC is maintained as notes are spawned and destroyed. Avoid
+				// countLiving() here: it scans every active note on every spawn-window frame.
+				while (limitNC < noteLimit && targetNote.strumTime - Conductor.songPosition < (NOTE_SPAWN_TIME / targetNote.multSpeed)) {
+					spawnedNote = recycleChartNote(targetNote.isSustainNote);
+					spawnedNote.setupNoteData(targetNote);
+					spawnedNote.countsTowardLimit = true;
+
+					#if LUA_ALLOWED
+				if (!ClientPrefs.noSpawnFunc && luaArray.length > 0) callOnLuas('onSpawnNote', [luaNoteIndex(spawnedNote), targetNote.noteData, targetNote.noteType, targetNote.isSustainNote]);
+				#end
 					notesAddedCount++; limitNC++;
-					if (unspawnNotes[notesAddedCount+1] != null) targetNote = unspawnNotes[notesAddedCount];
+					if (unspawnNotes[notesAddedCount] != null) targetNote = unspawnNotes[notesAddedCount];
 					else break;
 				}
 			}
 		}
 	}
+
+	#if mobile
+	private inline function updateMobileNoteGroup(group:FlxTypedGroup<Note>, activeList:Array<Note>, elapsed:Float):Void
+	{
+		#if LUA_ALLOWED
+		final members:Array<Note> = luaArray.length > 0 ? group.members : activeList;
+		#else
+		final members:Array<Note> = activeList;
+		#end
+		final length:Int = members.length;
+		var i:Int = 0;
+		while (i < length)
+		{
+			final note:Note = members[i];
+			if (note != null && note.exists && note.alive && note.active)
+				note.update(elapsed);
+			i++;
+		}
+	}
+	#end
 
 	function updateNote(daNote:Note):Void
 	{
@@ -5221,13 +6166,19 @@ class PlayState extends MusicBeatState
 			}
 			if (!daNote.exists) return;
 
-			amountOfRenderedNotes += daNote.noteDensity;
-			if (maxRenderedNotes < amountOfRenderedNotes) maxRenderedNotes = amountOfRenderedNotes;
-			daNote.followStrum((daNote.mustPress ? playerStrums : opponentStrums).members[daNote.noteData], songSpeed);
-			if (daNote.isSustainNote)
+			if (ClientPrefs.showRendered)
 			{
-				final strum = (daNote.mustPress ? playerStrums : opponentStrums).members[daNote.noteData];
-				if (strum != null && strum.sustainReduce) daNote.clipToStrumNote(strum);
+				amountOfRenderedNotes += daNote.noteDensity;
+				if (maxRenderedNotes < amountOfRenderedNotes) maxRenderedNotes = amountOfRenderedNotes;
+			}
+			// Hidden note sprites still need hit timing and expiration, but their
+			// receptor lookup, position updates and sustain clipping are pure visual work.
+			if (ClientPrefs.showNotes)
+			{
+				final strum:StrumNote = (daNote.mustPress ? playerStrums : opponentStrums).members[daNote.noteData];
+				daNote.followStrum(strum, songSpeed);
+				if (daNote.isSustainNote && strum != null && strum.sustainReduce)
+					daNote.clipToStrumNote(strum);
 			}
 
 			if (Conductor.songPosition > noteKillOffset + daNote.strumTime)
@@ -5261,24 +6212,39 @@ class PlayState extends MusicBeatState
 			{
 				hitsound.play(true);
 				hitsound.pitch = playbackRate;
-				if (FileSystem.exists('assets/shared/images/' + hitsoundImageToLoad + '.png') || FileSystem.exists(Paths.modFolders('images/' + hitsoundImageToLoad + '.png')) && hitImagesFrame < 4)
+
+				// Keep the audio hit, but avoid allocating a sprite, tween and completion
+				// closure for every BotPlay hit when the mobile low-lag preset is active.
+				if (!cpuControlled || !ClientPrefs.lessBotLag)
 				{
-					hitImagesFrame++;
-					hitsoundImage = new FlxSprite().loadGraphic(Paths.image(hitsoundImageToLoad));
-					hitsoundImage.antialiasing = ClientPrefs.globalAntialiasing;
-					hitsoundImage.scrollFactor.set();
-					hitsoundImage.setGraphicSize(Std.int(hitsoundImage.width / FlxG.camera.zoom));
-					hitsoundImage.updateHitbox();
-					hitsoundImage.screenCenter();
-					hitsoundImage.alpha = 1;
-					hitsoundImage.cameras = [camGame];
-					add(hitsoundImage);
-					FlxTween.tween(hitsoundImage, {alpha: 0}, 1 / (SONG.bpm/100) / playbackRate, {
-						onComplete: function(tween:FlxTween)
-						{
-							hitsoundImage.destroy();
-						}
-					});
+					// Check disk only once; the cached result is valid for this PlayState.
+					if (!hitsoundImageChecked)
+					{
+						hitsoundImageChecked = true;
+						hitsoundImageShared = FileSystem.exists('assets/shared/images/' + hitsoundImageToLoad + '.png');
+						hitsoundImageMod = FileSystem.exists(Paths.modFolders('images/' + hitsoundImageToLoad + '.png'));
+					}
+					if ((hitsoundImageShared || hitsoundImageMod) && hitImagesFrame < 4)
+					{
+						hitImagesFrame++;
+						final hitImage:FlxSprite = new FlxSprite().loadGraphic(Paths.image(hitsoundImageToLoad));
+						hitsoundImage = hitImage;
+						hitImage.antialiasing = ClientPrefs.globalAntialiasing;
+						hitImage.scrollFactor.set();
+						hitImage.setGraphicSize(Std.int(hitImage.width / FlxG.camera.zoom));
+						hitImage.updateHitbox();
+						hitImage.screenCenter();
+						hitImage.alpha = 1;
+						hitImage.cameras = [camGame];
+						add(hitImage);
+						FlxTween.tween(hitImage, {alpha: 0}, 1 / (SONG.bpm/100) / playbackRate, {
+							onComplete: function(tween:FlxTween)
+							{
+								remove(hitImage, true);
+								hitImage.destroy();
+							}
+						});
+					}
 				}
 			}
 
@@ -5424,8 +6390,10 @@ class PlayState extends MusicBeatState
 
 			if (!ClientPrefs.noHitFuncs)
 			{
-				callOnLuas((oppTrigger ? 'opponentNoteHit' : 'goodNoteHit'), [(note.isSustainNote ? sustainNotes : notes).members.indexOf(note), Math.abs(note.noteData), note.noteType, note.isSustainNote]);
-				stagesFunc(function(stage:BaseStage) (oppTrigger ? stage.opponentNoteHit(note) : stage.goodNoteHit(note)));
+				#if LUA_ALLOWED
+				if (luaArray.length > 0) callOnLuas((oppTrigger ? 'opponentNoteHit' : 'goodNoteHit'), [luaNoteIndex(note), Math.abs(note.noteData), note.noteType, note.isSustainNote]);
+				#end
+				if (stages.length > 0) stagesFunc(function(stage:BaseStage) (oppTrigger ? stage.opponentNoteHit(note) : stage.goodNoteHit(note)));
 			}
 
 			if (!note.isSustainNote) invalidateNote(note);
@@ -5479,7 +6447,9 @@ class PlayState extends MusicBeatState
 				}
 				if ((opponentChart ? polyphonyOppo : polyphonyBF) > 1) totalNotes += (opponentChart ? polyphonyOppo : polyphonyBF) - 1;
 			}
-			if (!ClientPrefs.noSkipFuncs) callOnLuas((oppTrigger ? 'opponentNoteSkip' : 'goodNoteSkip'), [null, Math.abs(noteAlt.noteData), noteAlt.noteType, noteAlt.isSustainNote]);
+			#if LUA_ALLOWED
+			if (!ClientPrefs.noSkipFuncs && luaArray.length > 0) callOnLuas((oppTrigger ? 'opponentNoteSkip' : 'goodNoteSkip'), [null, Math.abs(noteAlt.noteData), noteAlt.noteType, noteAlt.isSustainNote]);
+			#end
 			health += noteAlt.hitHealth * healthGain * (opponentChart ? polyphonyOppo : polyphonyBF);
 			if (!ffmpegMode)
 			{
@@ -5567,7 +6537,7 @@ class PlayState extends MusicBeatState
 				invalidateNote(daNote);
 			}
 
-			if(ClientPrefs.oppNoteSplashes && !daNote.isSustainNote && splashesPerFrame[0] <= 4)
+			if(ClientPrefs.oppNoteSplashes && (!cpuControlled || !ClientPrefs.lessBotLag) && !daNote.isSustainNote && splashesPerFrame[0] <= 4)
 				spawnNoteSplashOnNote(true, daNote);
 
 			if (SONG.needsVoices && !ffmpegMode)
@@ -5589,12 +6559,14 @@ class PlayState extends MusicBeatState
 			}
 			daNote.hitByOpponent = true;
 
-			if (ClientPrefs.oppNoteSplashes && daNote.isSustainNote && splashesPerFrame[2] <= 4) spawnHoldSplashOnNote(daNote, true);
+			if (ClientPrefs.oppNoteSplashes && (!cpuControlled || !ClientPrefs.lessBotLag) && daNote.isSustainNote && splashesPerFrame[2] <= 4) spawnHoldSplashOnNote(daNote, true);
 
 			if (!ClientPrefs.noHitFuncs)
 			{
-				callOnLuas((!opponentChart ? 'opponentNoteHit' : 'goodNoteHit'), [(daNote.isSustainNote ? sustainNotes : notes).members.indexOf(daNote), Math.abs(daNote.noteData), daNote.noteType, daNote.isSustainNote]);
-				stagesFunc(function(stage:BaseStage) (!opponentChart ? stage.opponentNoteHit(daNote) : stage.goodNoteHit(daNote)));
+				#if LUA_ALLOWED
+				if (luaArray.length > 0) callOnLuas((!opponentChart ? 'opponentNoteHit' : 'goodNoteHit'), [luaNoteIndex(daNote), Math.abs(daNote.noteData), daNote.noteType, daNote.isSustainNote]);
+				#end
+				if (stages.length > 0) stagesFunc(function(stage:BaseStage) (!opponentChart ? stage.opponentNoteHit(daNote) : stage.goodNoteHit(daNote)));
 			}
 
 			if (shouldDrainHealth && health > (healthDrainFloor * polyphonyOppo) && !practiceMode || opponentDrain && practiceMode)
@@ -5660,7 +6632,9 @@ class PlayState extends MusicBeatState
 				camGame.shake(oppChar.shakeIntensity, oppChar.shakeDuration / playbackRate);
 				camHUD.shake(oppChar.shakeIntensity / 2, oppChar.shakeDuration / playbackRate);
 			}
-			if (!ClientPrefs.noSkipFuncs) callOnLuas((!opponentChart ? 'opponentNoteSkip' : 'goodNoteSkip'), [null, Math.abs(noteAlt.noteData), noteAlt.noteType, noteAlt.isSustainNote]);
+			#if LUA_ALLOWED
+			if (!ClientPrefs.noSkipFuncs && luaArray.length > 0) callOnLuas((!opponentChart ? 'opponentNoteSkip' : 'goodNoteSkip'), [null, Math.abs(noteAlt.noteData), noteAlt.noteType, noteAlt.isSustainNote]);
+			#end
 			if (SONG.needsVoices && !ffmpegMode)
 				if (!opponentChart && opponentVocals != null && opponentVocals.volume != 1) opponentVocals.volume = 1;
 				else if (opponentChart && vocals.volume != 1 || vocals.volume != 1) vocals.volume = 1;
@@ -5680,15 +6654,27 @@ class PlayState extends MusicBeatState
 	var noteKill:Note = null;
 	public function destroyNotes():Void
 	{
-		final iterator:Iterator<Note> = killNotes.iterator();
-
-		while (iterator.hasNext())
+		// This runs every frame. Reuse the queue storage and avoid allocating an
+		// Iterator and a replacement Array when there are no notes to destroy.
+		var i:Int = 0;
+		while (i < killNotes.length)
 		{
-			noteKill = iterator.next();
+			noteKill = killNotes[i++];
 			noteKill.inKillQueue = false;
+			if (noteKill.countsTowardLimit)
+			{
+				noteKill.countsTowardLimit = false;
+				if (limitNC > 0) limitNC--;
+			}
+			unregisterActiveChartNote(noteKill);
 			noteKill.kill();
+			if (!noteKill.inFreeNotePool)
+			{
+				noteKill.inFreeNotePool = true;
+				(noteKill.isSustainNote ? freeSustainNotes : freeNotes).push(noteKill);
+			}
 		}
-		killNotes = [];
+		killNotes.resize(0);
 	}
 
 	public function spawnHoldSplashOnNote(note:Note, ?isDad:Bool = false) {
@@ -5782,6 +6768,10 @@ class PlayState extends MusicBeatState
 		Note.globalRgbShaders = [];
 		backend.NoteTypesConfig.clearNoteTypesData();
 
+		if (motionBlurShaderAttached && camGame != null && motionBlurShader != null)
+			camGame.removeShader(motionBlurShader);
+		motionBlurShaderAttached = false;
+		motionBlurShader = null;
 		super.destroy();
 	}
 
@@ -6110,9 +7100,22 @@ class PlayState extends MusicBeatState
 	}
 	#end
 
+	// Index of a note inside its group, only needed by Lua callbacks. members.indexOf() scans the whole group, so with
+	// thousands of notes doing it on every hit/spawn is O(n^2); skip it when no Lua script can receive the value.
+	private inline function luaNoteIndex(note:Note):Int
+	{
+		#if LUA_ALLOWED
+		if (luaArray.length == 0) return -1;
+		return (note.isSustainNote ? sustainNotes : notes).members.indexOf(note);
+		#else
+		return -1;
+		#end
+	}
+
 	public function callOnLuas(event:String, args:Array<Dynamic> = null, ignoreStops = true, exclusions:Array<String> = null, excludeValues:Array<Dynamic> = null):Dynamic {
 		var returnVal = FunkinLua.Function_Continue;
 		#if LUA_ALLOWED
+		if (luaArray.length == 0) return returnVal; // no scripts: skip allocating the empty exclusion arrays
 		if(args == null) args = [];
 		if(exclusions == null) exclusions = [];
 		if(excludeValues == null) excludeValues = [];
@@ -6206,29 +7209,19 @@ class PlayState extends MusicBeatState
 			 * # @Equinoxtic was here, hi :3
 			 */
 
-			final fcConditions:Array<Bool> = [
-				(totalPlayed == 0), // 'No Play'
-				(perfects > 0), // 'PFC'
-				(sicks > 0), // 'SFC'
-				(goods > 0), // 'GFC'
-				(bads > 0), // 'BFC'
-				(shits > 0), // 'FC'
-				(songMisses > 0 && songMisses < 10), // 'SDCB'
-				(songMisses >= 10), // 'Clear'
-				(songMisses >= 100), // 'TDCB'
-				(songMisses >= 1000) // 'QDCB'
-			];
-
-			var cond:Int = fcConditions.length - 1;
+			// Evaluate in the same priority order as the former reverse-scanned
+			// condition array, without allocating a fresh Bool array for each hit.
 			ratingFC = "";
-			while (cond >= 0)
-			{
-				if (fcConditions[cond]) {
-					ratingFC = fcStrings[cond];
-					break;
-				}
-				cond--;
-			}
+			if (songMisses >= 1000) ratingFC = fcStrings[9];
+			else if (songMisses >= 100) ratingFC = fcStrings[8];
+			else if (songMisses >= 10) ratingFC = fcStrings[7];
+			else if (songMisses > 0) ratingFC = fcStrings[6];
+			else if (shits > 0) ratingFC = fcStrings[5];
+			else if (bads > 0) ratingFC = fcStrings[4];
+			else if (goods > 0) ratingFC = fcStrings[3];
+			else if (sicks > 0) ratingFC = fcStrings[2];
+			else if (perfects > 0) ratingFC = fcStrings[1];
+			else if (totalPlayed == 0) ratingFC = fcStrings[0];
 
 			// basically same stuff, doesn't update every frame but it also means no memory leaks during botplay
 			if (scoreTxt != null)

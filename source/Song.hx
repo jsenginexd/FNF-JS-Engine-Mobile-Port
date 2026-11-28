@@ -69,21 +69,27 @@ class Song
 			for (secNum in 0...songJson.notes.length)
 			{
 				var sec:SwagSection = songJson.notes[secNum];
-
-				var i:Int = 0;
 				var notes:Array<Dynamic> = sec.sectionNotes;
-				var len:Int = notes.length;
-				while(i < len)
+				final len:Int = notes.length;
+				var writeIndex:Int = 0;
+
+				// Compact in one pass instead of removing each event from the middle
+				// of the array (which shifted every remaining note and became O(n²)).
+				for (readIndex in 0...len)
 				{
-					var note:Array<Dynamic> = notes[i];
-					if(note[1] < 0)
+					final note:Array<Dynamic> = notes[readIndex];
+					if (note[1] < 0)
 					{
 						songJson.events.push([note[0], [[note[2], note[3], note[4]]]]);
-						notes.remove(note);
-						len = notes.length;
 					}
-					else i++;
+					else
+					{
+						if (writeIndex != readIndex) notes[writeIndex] = note;
+						writeIndex++;
+					}
 				}
+
+				if (writeIndex < len) notes.resize(writeIndex);
 			}
 		}
 		
@@ -152,7 +158,8 @@ class Song
 		#if MODS_ALLOWED
 		var moddyFile:String = Paths.modsJson('$formattedFolder/$formattedSong');
 		if(FileSystem.exists(moddyFile)) {
-			rawJson = File.getContent(moddyFile).trim();
+			// Json.parse accepts surrounding whitespace; avoid allocating a full-size trimmed copy.
+			rawJson = File.getContent(moddyFile);
 		}
 		#end
 

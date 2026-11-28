@@ -20,6 +20,22 @@ class OptimizationSubState extends BaseOptionsMenu
       'enableGC', 'bool', true);
     addOption(option);
 
+    final option:Option = new Option('Smooth Note Textures',
+      'Uses linear GPU sampling for regular note skins and receptors while keeping the original full-resolution note atlas. Pixel-art stages stay crisp.',
+      'smoothNotes', 'bool', true);
+    addOption(option);
+
+    final option:Option = new Option('Motion Blur Quality',
+      'Performance uses 3 shader samples, Balanced uses 5, and Quality uses 9. Fewer samples reduce GPU work without disabling Motion Blur.',
+      'motionBlurQuality', 'string', #if mobile 'Performance' #else 'Quality' #end,
+      ['Performance', 'Balanced', 'Quality']);
+    addOption(option);
+
+    final option:Option = new Option('Stage Texture Saver',
+      'Reduces selected stage, background and effect textures to 70% before GPU upload. Note skins remain full resolution. Restart or reload the stage after changing this.',
+      'reduceBackgroundTextures', 'bool', #if mobile true #else false #end);
+    addOption(option);
+
     final option:Option = new Option('Light Opponent Strums', "If this is unchecked, the Opponent strums won't light up when the Opponent hits a note.",
       'opponentLightStrum', 'bool', true);
     addOption(option);
@@ -55,7 +71,67 @@ class OptimizationSubState extends BaseOptionsMenu
       'bool', false);
     addOption(option);
 
-    final option:Option = new Option('Even LESS Botplay Lag', "Reduce Botplay lag even further.", 'lessBotLag', 'bool', false);
+    final option:Option = new Option('Even LESS Botplay Lag', "On mobile this is enabled by default. During BotPlay, keeps hit sounds, notes, receptors and character animations but skips rating popups, note splashes and hit-image overlays to reduce per-note visual allocations.", 'lessBotLag', 'bool', #if mobile true #else false #end);
+    addOption(option);
+
+    final option:Option = new Option('Max Active Splash Pool',
+      'Caps the reusable note-splash and sustain-splash sprites created for a song. Lower values limit retained effect objects during dense charts. This does not limit, hide, resize or reduce note textures. Applied when the next song starts.',
+      'maxSplashLimit', 'int', #if mobile 8 #else 16 #end);
+    option.scrollSpeed = 12;
+    option.minValue = 2;
+    option.maxValue = 64;
+    option.changeValue = 2;
+    option.displayFormat = '%v Effects';
+    addOption(option);
+
+    final option:Option = new Option('Fast Mobile Note Updates',
+      'Uses compact active-note arrays instead of generic Flixel group traversal on mobile. Keeps every note and hit check. Applied when the next song starts.',
+      'fastMobileNoteUpdates', 'bool', #if mobile true #else false #end);
+    addOption(option);
+
+    final option:Option = new Option('Adaptive Note Sorting',
+      'Sorts large charts less often when note membership changes are rare: every 4 frames above 400 notes and every 8 above 2,000. Turn off for a sort every frame.',
+      'adaptiveNoteSorting', 'bool', true);
+    addOption(option);
+
+    final option:Option = new Option('Cache Sustain Scale',
+      'Reuses sustain scale calculations until BPM, scroll speed, skin scale or sustain type changes. Disable only for troubleshooting.',
+      'cacheSustainScale', 'bool', true);
+    addOption(option);
+
+    final option:Option = new Option('Cache Sustain Clipping',
+      'Skips repeated frame clipping when a sustain has the same frame and clip rectangle as the previous update.',
+      'cacheSustainClipping', 'bool', true);
+    addOption(option);
+
+    final option:Option = new Option('Cache Note Hit Windows',
+      'Reuses early/late hit-window multiplications while timing preferences stay unchanged. Hit timing comparisons remain the same.',
+      'cacheNoteHitWindows', 'bool', true);
+    addOption(option);
+
+    final option:Option = new Option('Cache Note Distance',
+      'Caches the song-speed multiplier used for note movement. Disable only to compare the original uncached calculation.',
+      'cacheNoteDistance', 'bool', true);
+    addOption(option);
+
+    final option:Option = new Option('Cache Note Transforms',
+      'Avoids rewriting identical note X/Y coordinates when the target transform has not changed. Notes still move every frame when needed.',
+      'cacheNoteTransforms', 'bool', true);
+    addOption(option);
+
+    final option:Option = new Option('Cache Sustain Hitbox',
+      'Rebuilds sustain hitboxes only when frame dimensions or scale change, reducing repeated CPU work.',
+      'cacheSustainHitbox', 'bool', true);
+    addOption(option);
+
+    final option:Option = new Option('Batched Botplay Skips',
+      'Uses the existing callback-safe batch path for ordinary overdue Botplay notes. Special note types and Lua charts keep the normal path.',
+      'batchBotplaySkips', 'bool', #if mobile true #else false #end);
+    addOption(option);
+
+    final option:Option = new Option('Fast Mobile Note Render Loop',
+      'Uses a compact indexed draw loop for note groups while preserving Flixel camera routing, draw order, full-size textures and note visibility.',
+      'fastMobileNoteRenderLoop', 'bool', #if mobile true #else false #end);
     addOption(option);
 
     final option:Option = new Option('Max Rendered Notes: ', "The max amount of notes that the game can render onscreen.\nTo remove this limit, set it to 0.",

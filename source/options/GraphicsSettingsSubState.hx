@@ -35,6 +35,22 @@ class GraphicsSettingsSubState extends BaseOptionsMenu
       true); // Default value
     addOption(option);
 
+    final option:Option = new Option('Motion Blur',
+      'Enables directional GLSL motion blur on the gameplay camera. Its sample quality is configurable in Optimization; the HUD stays clear. Requires Shaders to be enabled.',
+      'motionBlur', 'bool', false);
+    addOption(option);
+
+    final option:Option = new Option('Motion Blur Strength',
+      'Controls shader blur intensity from 0 to 12. Higher values create a longer, stronger directional smear and use more GPU time.',
+      'motionBlurStrength', 'float', 12.0);
+    option.scrollSpeed = 0.25;
+    option.minValue = 0;
+    option.maxValue = 12;
+    option.changeValue = 0.1;
+    option.decimals = 1;
+    option.displayFormat = '%v';
+    addOption(option);
+
     final option:Option = new Option('GPU Caching', // Name
       "If checked, allows the GPU to be used for caching textures, decreasing RAM usage.\nDon't turn this on if you have a shitty Graphics Card.", // Description
       'cacheOnGPU', 'bool', false); // Don't turn this on by default

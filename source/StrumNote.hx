@@ -9,7 +9,28 @@ class StrumNote extends FlxSprite
 	public var notes_angle:Null<Float> = null;
 	public var resetAnim:Float = 0;
 	public var noteData:Int = 0;
-	public var direction:Float = 90;//plan on doing scroll directions soon -bb
+	public var direction(default, set):Float = 90;//plan on doing scroll directions soon -bb
+	public var directionCos:Float = 0;
+	public var directionSin:Float = 1;
+	private var cachedDirection:Float = 90;
+	private var directionCacheValid:Bool = true;
+
+	// Recalculate trigonometry only when a receptor's direction actually changes,
+	// rather than checking the cache once for every note that follows this receptor.
+	function set_direction(value:Float):Float
+	{
+		if (!directionCacheValid || cachedDirection != value)
+		{
+			direction = value;
+			cachedDirection = value;
+			final radians:Float = value * Math.PI / 180;
+			directionCos = Math.cos(radians);
+			directionSin = Math.sin(radians);
+			directionCacheValid = true;
+		}
+		return value;
+	}
+
 	public var downScroll:Bool = false;//plan on doing scroll directions soon -bb
 	public var sustainReduce:Bool = true;
 
@@ -31,19 +52,26 @@ class StrumNote extends FlxSprite
 	}
 
 	public function new(x:Float, y:Float, leData:Int, player:Int, ?inEditor:Bool = false) {
-		rgbShader = new RGBShaderReference(this, Note.initializeGlobalRGBShader(leData));
-		rgbShader.enabled = false;
-		if(PlayState.SONG != null && PlayState.SONG.disableNoteRGB || !ClientPrefs.enableColorShader) useRGBShader = false;
-
-		var arr:Array<FlxColor> = ClientPrefs.arrowRGB[leData];
-		if(PlayState.isPixelStage) arr = ClientPrefs.arrowRGBPixel[leData];
-		if(arr != null && leData <= arr.length && useRGBShader)
+		// Do not construct a shader reference at all when mobile performance
+		// settings disable note RGB. A null shader is safe: all use sites below
+		// are guarded by useRGBShader or an explicit null check.
+		useRGBShader = ClientPrefs.enableColorShader &&
+			(PlayState.SONG == null || !PlayState.SONG.disableNoteRGB);
+		if (useRGBShader)
 		{
-			@:bypassAccessor
+			rgbShader = new RGBShaderReference(this, Note.initializeGlobalRGBShader(leData));
+			rgbShader.enabled = false;
+
+			var arr:Array<FlxColor> = ClientPrefs.arrowRGB[leData];
+			if(mobile.MobileOptimization.usePixelNoteSkin(PlayState.isPixelStage)) arr = ClientPrefs.arrowRGBPixel[leData];
+			if(arr != null && leData <= arr.length)
 			{
-				rgbShader.r = arr[0];
-				rgbShader.g = arr[1];
-				rgbShader.b = arr[2];
+				@:bypassAccessor
+				{
+					rgbShader.r = arr[0];
+					rgbShader.g = arr[1];
+					rgbShader.b = arr[2];
+				}
 			}
 		}
 		noteData = leData;
@@ -56,7 +84,14 @@ class StrumNote extends FlxSprite
 		else skin = Note.defaultNoteSkin;
 
 		var customSkin:String = skin + Note.getNoteSkinPostfix();
-		if(Paths.fileExists('images/$customSkin.png', IMAGE)) skin = customSkin;
+		#if mobile
+		if (mobile.MobileOptimization.usePixelNoteSkin(PlayState.isPixelStage))
+			skin = Paths.fileExists('images/pixelUI/$customSkin.png', IMAGE) ? customSkin : 'noteskins/NOTE_assets';
+		else
+			skin = Paths.fileExists('images/$customSkin.png', IMAGE) ? customSkin : Paths.defaultSkin;
+		#else
+		if (Paths.fileExists('images/$customSkin.png', IMAGE)) skin = customSkin;
+		#end
 
 		texture = skin; //Load texture and anims
 		ogNoteskin = skin;
@@ -69,7 +104,7 @@ class StrumNote extends FlxSprite
 		var lastAnim:String = null;
 		if(animation.curAnim != null) lastAnim = animation.curAnim.name;
 
-		if(PlayState.isPixelStage)
+		if(mobile.MobileOptimization.usePixelNoteSkin(PlayState.isPixelStage))
 		{
 			loadGraphic(Paths.image('pixelUI/' + texture));
 			width = width / 4;
@@ -77,7 +112,7 @@ class StrumNote extends FlxSprite
 			loadGraphic(Paths.image('pixelUI/' + texture), true, Math.floor(width), Math.floor(height));
 
 			antialiasing = false;
-			setGraphicSize(Std.int(width * PlayState.daPixelZoom));
+			mobile.MobileOptimization.setCompactPixelNoteSize(this, PlayState.daPixelZoom);
 
 			animation.add('green', [6]);
 			animation.add('red', [7]);
@@ -111,8 +146,8 @@ class StrumNote extends FlxSprite
 			animation.addByPrefix('purple', 'arrowLEFT');
 			animation.addByPrefix('red', 'arrowRIGHT');
 
-			antialiasing = ClientPrefs.globalAntialiasing;
-			setGraphicSize(Std.int(width * 0.7));
+			mobile.MobileOptimization.applyNoteSmoothing(this, mobile.MobileOptimization.usePixelNoteSkin(PlayState.isPixelStage));
+			setGraphicSize(Std.int(width * mobile.MobileOptimization.noteDisplayScale(0.7)));
 
 			switch (Math.abs(noteData) % 4)
 			{
@@ -140,6 +175,10 @@ class StrumNote extends FlxSprite
 		{
 			playAnim(lastAnim, true);
 		}
+
+		// Apply filtering last so atlas/animation reloads cannot leave receptors
+		// with the pixel-art default on regular stages.
+		mobile.MobileOptimization.applyNoteSmoothing(this, mobile.MobileOptimization.usePixelNoteSkin(PlayState.isPixelStage));
 	}
 
 	public function postAddedToGroup() {

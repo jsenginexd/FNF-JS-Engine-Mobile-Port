@@ -87,6 +87,15 @@ class ClientPrefs { //default settings if it can't find a save file containing y
 	public static var lowQuality:Bool = false;
 	public static var globalAntialiasing:Bool = true;
 	public static var shaders:Bool = true;
+	// Screen-space GLSL motion blur on the gameplay camera; disabled by default.
+	public static var motionBlur:Bool = false;
+	public static var motionBlurStrength:Float = 12.0;
+	// Mobile shader quality can trade a few blur samples for much lower GPU cost.
+	public static var motionBlurQuality:String = #if mobile 'Performance' #else 'Quality' #end;
+	// Keep regular note atlases filtered without forcing the global sprite AA setting.
+	public static var smoothNotes:Bool = true;
+	// Reduce selected stage/effect texture memory; note skins are never downsampled.
+	public static var reduceBackgroundTextures:Bool = #if mobile true #else false #end;
 	// phones: upload textures to the GPU and free the CPU copy (much less RAM, fewer out-of-memory closes)
 	public static var cacheOnGPU:Bool = #if mobile true #else false #end;
 	public static var dynamicSpawnTime:Bool = false;
@@ -106,8 +115,20 @@ class ClientPrefs { //default settings if it can't find a save file containing y
 	public static var noSpawnFunc:Bool = false;
 	public static var noHitFuncs:Bool = false;
 	public static var noSkipFuncs:Bool = false;
-	public static var lessBotLag:Bool = false;
+	public static var lessBotLag:Bool = #if mobile true #else false #end;
 	public static var maxNotes:Int = 0;
+	// Optional mobile/gameplay hot-path controls. Enabled by default for performance.
+	public static var fastMobileNoteUpdates:Bool = #if mobile true #else false #end;
+	public static var adaptiveNoteSorting:Bool = true;
+	public static var cacheSustainScale:Bool = true;
+	public static var cacheSustainClipping:Bool = true;
+	public static var cacheNoteHitWindows:Bool = true;
+	// Additional mobile rendering and hot-path controls.
+	public static var cacheNoteDistance:Bool = true;
+	public static var cacheNoteTransforms:Bool = true;
+	public static var cacheSustainHitbox:Bool = true;
+	public static var batchBotplaySkips:Bool = #if mobile true #else false #end;
+	public static var fastMobileNoteRenderLoop:Bool = #if mobile true #else false #end;
 
 	//Secret Debug
 	public static var noGunsRNG:Bool = false;
@@ -359,14 +380,40 @@ class ClientPrefs { //default settings if it can't find a save file containing y
 			FlxG.save.data.mobileSpeedPresetV1 = true;
 			FlxG.save.flush();
 		}
-		// preset V2: cap the notes that are alive on screen at once (the rest are still counted/hit, just not drawn)
+		// preset V2 used to cap visible notes at 250. That silently hid dense-chart notes
+		// on mobile, so preserve the user's unlimited-note default instead.
 		if (FlxG.save.data.mobileSpeedPresetV2 != true)
 		{
-			maxNotes = 250;
-			FlxG.save.data.maxNotes = 250;
+			if (maxNotes == 250) maxNotes = 0;
+			FlxG.save.data.maxNotes = maxNotes;
 			FlxG.save.data.mobileSpeedPresetV2 = true;
 			FlxG.save.flush();
 		}
+		// Migrate installs that already received the old V2 cap. Only undo the exact
+		// forced value; keep any different cap the player deliberately selected.
+		if (FlxG.save.data.mobileSpeedPresetV3 != true)
+		{
+			if (maxNotes == 250)
+			{
+				maxNotes = 0;
+				FlxG.save.data.maxNotes = 0;
+			}
+			FlxG.save.data.mobileSpeedPresetV3 = true;
+			FlxG.save.flush();
+		}
+
+		// V4 used to disable note RGB on mobile. That made the receptors and notes
+		// lose their intended lane colours, so stop forcing that visual downgrade.
+		// V5 restores the engine's default shader setting once for installs that
+		// already received the old V4 migration.
+		if (FlxG.save.data.mobileSpeedPresetV5 != true)
+		{
+			enableColorShader = true;
+			FlxG.save.data.enableColorShader = true;
+			FlxG.save.data.mobileSpeedPresetV5 = true;
+			FlxG.save.flush();
+		}
+
 		// the touch hitbox is read through Controls like a gamepad, never through keyboard events
 		controllerMode = true;
 		#end

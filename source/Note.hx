@@ -81,6 +81,12 @@ class Note extends FlxSprite
 	public var tooLate:Bool = false;
 	public var wasGoodHit:Bool = false;
 	public var inKillQueue:Bool = false; // already waiting in PlayState.killNotes
+	public var countsTowardLimit:Bool = false; // included in PlayState.limitNC
+	// Pool bookkeeping: avoid scanning the entire FlxTypedGroup on each spawn.
+	public var inNoteGroup:Bool = false;
+	public var inFreeNotePool:Bool = false;
+	// Index in PlayState's compact live-note list; -1 means not currently active.
+	public var activeListIndex:Int = -1;
 	public var ignoreNote:Bool = false;
 	public var hitByOpponent:Bool = false; //For Opponent notes
 
@@ -109,6 +115,9 @@ class Note extends FlxSprite
 	public var lowPriority:Bool = false;
 
 	public static final SUSTAIN_SIZE:Int = 44;
+	// Tiny overlap between adjacent sustain body pieces hides atlas/filtering seams
+	// without turning the hold into one solid bar or changing chart timing.
+	public static final SUSTAIN_TEXTURE_OVERLAP:Float = mobile.MobileOptimization.SUSTAIN_TEXTURE_OVERLAP;
 	public static final swagWidth:Float = 160 * 0.7;
 
 	public static final colArray:Array<String> = ['purple', 'blue', 'green', 'red'];
@@ -158,6 +167,90 @@ class Note extends FlxSprite
 	public var hitCausesMiss:Bool = false;
 	public var distance:Float = 2000; //plan on doing scroll directions soon -bb
 
+	// Sustain notes keep the same hitbox dimensions for many frames. Avoid rebuilding
+	// the Flixel hitbox unless the scale or current animation frame actually changes.
+	private var hitboxCacheValid:Bool = false;
+	private var hitboxScaleX:Float = 0;
+	private var hitboxScaleY:Float = 0;
+	private var hitboxFrameWidth:Float = 0;
+	private var hitboxFrameHeight:Float = 0;
+
+	// Sustain animations usually remain unchanged for hundreds of frames.
+	// Cache the current animation object so we do not run endsWith() for every note every frame.
+	private var cachedSustainAnim:Dynamic = null;
+	private var cachedSustainIsEnd:Bool = false;
+
+	// Sustain geometry is constant for most frames. Cache its scale until one of
+	// the inputs changes (BPM, scroll speed, skin scale, pixel mode, or end cap).
+	private var sustainScaleCacheValid:Bool = false;
+	private var sustainScaleCacheStepCrochet:Float = 0;
+	private var sustainScaleCacheSongSpeed:Float = 0;
+	private var sustainScaleCacheMultSpeed:Float = 0;
+	private var sustainScaleCacheNoteScale:Float = 0;
+	private var sustainScaleCachePixelZoom:Float = 0;
+	private var sustainScaleCachePixelStage:Bool = false;
+	private var sustainScaleCacheIsEnd:Bool = false;
+	private var cachedSustainScaleY:Float = 1;
+
+	// The distance multiplier changes rarely; cache it instead of rebuilding
+	// 0.45 * songSpeed * multSpeed for every note on every gameplay frame.
+	private var noteDistanceCacheValid:Bool = false;
+	private var noteDistanceCacheSongSpeed:Float = 0;
+	private var noteDistanceCacheMultSpeed:Float = 0;
+	private var noteDistanceCacheFactor:Float = 0;
+
+	// Cache only hit-window multiplications. Keep the original comparison
+	// expressions and operation order exactly to preserve floating-point edges.
+	private var hitWindowCacheValid:Bool = false;
+	private var hitWindowCacheSafeZone:Float = 0;
+	private var hitWindowCacheLateMult:Float = 0;
+	private var hitWindowCacheEarlyMult:Float = 0;
+	private var cachedLateHitWindow:Float = 0;
+	private var cachedEarlyHitWindow:Float = 0;
+
+	// Cache the last clipping rectangle. Most sustain notes are not crossing a receptor,
+	// so repeatedly clipping an unchanged full frame is wasted CPU work.
+	private var clipCacheValid:Bool = false;
+	private var clipCacheFrame:Dynamic = null;
+	private var clipCacheX:Float = 0;
+	private var clipCacheY:Float = 0;
+	private var clipCacheWidth:Float = 0;
+	private var clipCacheHeight:Float = 0;
+
+	private inline function getCachedNoteDistance(songPosition:Float, songSpeed:Float, downScroll:Bool):Float
+	{
+		if (!ClientPrefs.cacheNoteDistance)
+		{
+			final uncached:Float = 0.45 * (songPosition - strumTime) * songSpeed * multSpeed;
+			return downScroll ? uncached : -uncached;
+		}
+		if (!noteDistanceCacheValid || noteDistanceCacheSongSpeed != songSpeed ||
+			noteDistanceCacheMultSpeed != multSpeed)
+		{
+			noteDistanceCacheSongSpeed = songSpeed;
+			noteDistanceCacheMultSpeed = multSpeed;
+			noteDistanceCacheFactor = 0.45 * songSpeed * multSpeed;
+			noteDistanceCacheValid = true;
+		}
+
+		final result:Float = (songPosition - strumTime) * noteDistanceCacheFactor;
+		return downScroll ? result : -result;
+	}
+
+	private inline function updateHitboxIfNeeded():Void
+	{
+		if (!ClientPrefs.cacheSustainHitbox || !hitboxCacheValid || hitboxScaleX != scale.x || hitboxScaleY != scale.y ||
+			hitboxFrameWidth != frameWidth || hitboxFrameHeight != frameHeight)
+		{
+			updateHitbox();
+			hitboxScaleX = scale.x;
+			hitboxScaleY = scale.y;
+			hitboxFrameWidth = frameWidth;
+			hitboxFrameHeight = frameHeight;
+			hitboxCacheValid = true;
+		}
+	}
+
 	public var hitsoundDisabled:Bool = false;
 
 	public var pixelNote:Bool = false;
@@ -176,6 +269,11 @@ class Note extends FlxSprite
 
 	private function set_texture(value:String):String {
 		if (value.length == 0) value = Paths.defaultSkin;
+		#if mobile
+		// Mod charts may name a pixel-only skin. If its full-resolution atlas is
+		// absent, fall back to the shared smooth atlas instead of loading null.
+		if (!pixelNote && !Paths.fileExists('images/$value.png', IMAGE)) value = Paths.defaultSkin;
+		#end
 		if (!pixelNote && texture != value)
 		{
 			changeSize = false;
@@ -183,18 +281,18 @@ class Note extends FlxSprite
 			if (frames != @:privateAccess Paths.noteSkinFramesMap.get(value)) frames = @:privateAccess Paths.noteSkinFramesMap.get(value);
 			if (animation != @:privateAccess Paths.noteSkinAnimsMap.get(value)) animation.copyFrom(@:privateAccess Paths.noteSkinAnimsMap.get(value));
 
-			antialiasing = ClientPrefs.globalAntialiasing;
+			mobile.MobileOptimization.applyNoteSmoothing(this, pixelNote);
 
 			if (!changeSize)
 			{
 				changeSize = true;
-				setGraphicSize(Std.int(width * 0.7));
+				setGraphicSize(Std.int(width * mobile.MobileOptimization.noteDisplayScale(0.7)));
 				updateHitbox();
 			}
 			offsetX = 0;
 		}
 		else if (!pixelNote) return value;
-		else if (pixelNote && inEditor) reloadNote(value);
+		else if (pixelNote) reloadNote(value);
 		texture = value;
 		return value;
 	}
@@ -202,7 +300,7 @@ class Note extends FlxSprite
 	var noteColor:Array<FlxColor>;
 	public function defaultRGB()
 	{
-		noteColor = !PlayState.isPixelStage ? ClientPrefs.arrowRGB[noteData] : ClientPrefs.arrowRGBPixel[noteData];
+		noteColor = !pixelNote ? ClientPrefs.arrowRGB[noteData] : ClientPrefs.arrowRGBPixel[noteData];
 
 		if (noteColor != null && noteData > -1 && noteData <= noteColor.length)
 		{
@@ -246,13 +344,13 @@ class Note extends FlxSprite
 	{
 		super();
 
-		pixelNote = PlayState.isPixelStage;
+		pixelNote = mobile.MobileOptimization.usePixelNoteSkin(PlayState.isPixelStage);
 
 		if (!Math.isNaN(newNoteData) && pixelNote) noteData = newNoteData;
 		if (!Math.isNaN(newStrumTime)) strumTime = newStrumTime;
 
 		y -= 2000;
-		antialiasing = ClientPrefs.globalAntialiasing && !pixelNote;
+		mobile.MobileOptimization.applyNoteSmoothing(this, pixelNote);
 
 		if(noteData > -1) {
 			if (ClientPrefs.showNotes) texture = Paths.defaultSkin;
@@ -276,7 +374,8 @@ class Note extends FlxSprite
 				var newRGB:RGBPalette = new RGBPalette();
 				globalRgbShaders[noteData] = newRGB;
 
-				var arr:Array<FlxColor> = ClientPrefs.noteColorStyle != 'Quant-Based' ? (!PlayState.isPixelStage) ? ClientPrefs.arrowRGB[noteData] : ClientPrefs.arrowRGBPixel[noteData] : ClientPrefs.quantRGB[noteData];
+				final usePixelColors:Bool = note != null ? note.pixelNote : mobile.MobileOptimization.usePixelNoteSkin(PlayState.isPixelStage);
+				var arr:Array<FlxColor> = ClientPrefs.noteColorStyle != 'Quant-Based' ? (usePixelColors ? ClientPrefs.arrowRGBPixel[noteData] : ClientPrefs.arrowRGB[noteData]) : ClientPrefs.quantRGB[noteData];
 				if (arr != null && noteData > -1 && noteData <= arr.length)
 				{
 					newRGB.r = arr[0];
@@ -364,7 +463,14 @@ class Note extends FlxSprite
 			skin = customSkin;
 			_lastValidChecked = customSkin;
 		}
-		else skinPostfix = '';
+		else
+		{
+			skinPostfix = '';
+			#if mobile
+			if (pixelNote && !Paths.fileExists('images/pixelUI/' + skinPixel + '.png', IMAGE))
+				skinPixel = 'noteskins/NOTE_assets';
+			#end
+		}
 
 		if(pixelNote) {
 			if(isSustainNote) {
@@ -375,7 +481,10 @@ class Note extends FlxSprite
 				var graphic = Paths.image('pixelUI/' + skinPixel + skinPostfix);
 				loadGraphic(graphic, true, Math.floor(graphic.width / 4), Math.floor(graphic.height / 5));
 			}
-			setGraphicSize(Std.int(width * PlayState.daPixelZoom));
+			if (isSustainNote)
+				setGraphicSize(Std.int(width * PlayState.daPixelZoom));
+			else
+				mobile.MobileOptimization.setCompactPixelNoteSize(this, PlayState.daPixelZoom);
 			if(isSustainNote)
 			{
 				animation.add(colArray[noteData] + 'holdend', [noteData + 4], 24, true);
@@ -397,13 +506,13 @@ class Note extends FlxSprite
 				animation.addByPrefix(colArray[noteData] + 'holdend', colArray[noteData] + ' hold end');
 				animation.addByPrefix(colArray[noteData] + 'hold', colArray[noteData] + ' hold piece');
 			}
-			setGraphicSize(Std.int(width * 0.7));
+			setGraphicSize(Std.int(width * mobile.MobileOptimization.noteDisplayScale(0.7)));
 			if(!isSustainNote)
 			{
 				centerOffsets();
 				centerOrigin();
 			}
-			antialiasing = ClientPrefs.globalAntialiasing;
+			mobile.MobileOptimization.applyNoteSmoothing(this, pixelNote);
 		}
 		if(isSustainNote) {
 			scale.y = lastScaleY;
@@ -417,6 +526,10 @@ class Note extends FlxSprite
 			setGraphicSize(editors.ChartingState.GRID_SIZE, editors.ChartingState.GRID_SIZE);
 			updateHitbox();
 		}
+
+		// Reapply after frame/animation/size changes: atlas reloads can reset
+		// sprite filtering. Keep pixel-art crisp and smooth regular note skins.
+		mobile.MobileOptimization.applyNoteSmoothing(this, pixelNote);
 	}
 
 	public static function getNoteSkinPostfix()
@@ -429,28 +542,44 @@ class Note extends FlxSprite
 
 	override function update(elapsed:Float)
 	{
-		if (Main.isPlayState() && PlayState.instance.cpuControlled) return;
+		#if !mobile
+		// Non-mobile builds still use the generic group update path during BotPlay.
+		// Mobile PlayState dispatches Note.update manually and skips that pass entirely
+		// during BotPlay, so repeating these global state checks for every note is redundant.
+		if (PlayState.instance != null && FlxG.state == PlayState.instance && PlayState.instance.cpuControlled) return;
+		#end
 
 		super.update(elapsed);
 
+		final songPosition:Float = Conductor.songPosition;
+		final safeZone:Float = Conductor.safeZoneOffset;
+		if (!ClientPrefs.cacheNoteHitWindows || !hitWindowCacheValid || hitWindowCacheSafeZone != safeZone ||
+			hitWindowCacheLateMult != lateHitMult || hitWindowCacheEarlyMult != earlyHitMult)
+		{
+			cachedLateHitWindow = safeZone * lateHitMult;
+			cachedEarlyHitWindow = safeZone * earlyHitMult;
+			hitWindowCacheSafeZone = safeZone;
+			hitWindowCacheLateMult = lateHitMult;
+			hitWindowCacheEarlyMult = earlyHitMult;
+			hitWindowCacheValid = true;
+		}
+
 		if (mustPress)
 		{
-			canBeHit = (strumTime > Conductor.songPosition - (Conductor.safeZoneOffset * lateHitMult) &&
-						strumTime < Conductor.songPosition + (Conductor.safeZoneOffset * earlyHitMult));
+			// Keep the original expression order; its strict edges are gameplay timing.
+			canBeHit = (strumTime > songPosition - cachedLateHitWindow &&
+						strumTime < songPosition + cachedEarlyHitWindow);
 
-			if (strumTime < Conductor.songPosition - Conductor.safeZoneOffset && !wasGoodHit && !ignoreNote)
+			if (strumTime < songPosition - safeZone && !wasGoodHit && !ignoreNote)
 				tooLate = true;
-			else tooLate = false;
+			else if (tooLate) tooLate = false;
 		}
 		else
 		{
-			canBeHit = false;
+			if (canBeHit) canBeHit = false;
 
-			if (strumTime < Conductor.songPosition + (Conductor.safeZoneOffset * earlyHitMult))
-			{
-				if(strumTime <= Conductor.songPosition)
-					wasGoodHit = true;
-			}
+			if (strumTime < songPosition + cachedEarlyHitWindow && strumTime <= songPosition)
+				wasGoodHit = true;
 		}
 
 		if (tooLate && !inEditor)
@@ -464,35 +593,82 @@ class Note extends FlxSprite
 	{
 		if (isSustainNote)
 		{
-			flipY = strum.downScroll;
-			scale.set(0.7, animation != null && animation.curAnim != null && animation.curAnim.name.endsWith('end') ? 1 : Conductor.stepCrochet * 0.0105 * (songSpeed * multSpeed) * sustainScale);
+			if (flipY != strum.downScroll) flipY = strum.downScroll;
 
-			if (PlayState.isPixelStage)
+			final curAnim = animation == null ? null : animation.curAnim;
+			if (cachedSustainAnim != curAnim)
 			{
-				scale.y *= PlayState.daPixelZoom * 1.20;
-				scale.x *= PlayState.daPixelZoom;
+				cachedSustainAnim = curAnim;
+				cachedSustainIsEnd = curAnim != null && curAnim.name.endsWith('end');
 			}
-			updateHitbox();
+
+			final stepCrochet:Float = Conductor.stepCrochet;
+			final pixelStage:Bool = pixelNote;
+			final pixelZoom:Float = PlayState.daPixelZoom;
+			if (!ClientPrefs.cacheSustainScale || !sustainScaleCacheValid || sustainScaleCacheStepCrochet != stepCrochet ||
+				sustainScaleCacheSongSpeed != songSpeed || sustainScaleCacheMultSpeed != multSpeed ||
+				sustainScaleCacheNoteScale != sustainScale || sustainScaleCachePixelZoom != pixelZoom ||
+				sustainScaleCachePixelStage != pixelStage || sustainScaleCacheIsEnd != cachedSustainIsEnd)
+			{
+				cachedSustainScaleY = mobile.NativeNoteMath.sustainScale(
+					stepCrochet, songSpeed, multSpeed, sustainScale,
+					pixelStage, SUSTAIN_TEXTURE_OVERLAP, pixelZoom, cachedSustainIsEnd);
+				sustainScaleCacheStepCrochet = stepCrochet;
+				sustainScaleCacheSongSpeed = songSpeed;
+				sustainScaleCacheMultSpeed = multSpeed;
+				sustainScaleCacheNoteScale = sustainScale;
+				sustainScaleCachePixelZoom = pixelZoom;
+				sustainScaleCachePixelStage = pixelStage;
+				sustainScaleCacheIsEnd = cachedSustainIsEnd;
+				sustainScaleCacheValid = true;
+			}
+			final sustainScaleY:Float = cachedSustainScaleY;
+
+			// copyScaleX overwrites X below, so do not write a temporary 0.7 value.
+			// Avoid dirtying the scale point when the sustain dimensions are unchanged.
+			if (copyScaleX)
+			{
+				if (scale.y != sustainScaleY) scale.y = sustainScaleY;
+			}
+			else
+			{
+				final sustainScaleX:Float = pixelNote ? PlayState.daPixelZoom * 0.7 : mobile.MobileOptimization.noteDisplayScale(0.7);
+				if (scale.x != sustainScaleX || scale.y != sustainScaleY)
+					scale.set(sustainScaleX, sustainScaleY);
+			}
+
+			// copyScaleX refreshes the hitbox after applying the receptor scale below.
+			// Avoid doing the same hitbox work twice for every sustain note each frame.
+			if (!copyScaleX) updateHitboxIfNeeded();
 		}
 
-		distance = (0.45 * (Conductor.songPosition - strumTime) * songSpeed * multSpeed);
-		if (!ClientPrefs.downScroll) distance *= -1;
+		distance = getCachedNoteDistance(Conductor.songPosition, songSpeed, ClientPrefs.downScroll);
 
 		if (copyAngle)
-			angle = strum.direction - 90 + strum.angle + offsetAngle;
+		{
+			final targetAngle:Float = strum.direction - 90 + strum.angle + offsetAngle;
+			if (angle != targetAngle) angle = targetAngle;
+		}
 
-		if(copyAlpha)
-			alpha = strum.alpha * multAlpha;
+		if (copyAlpha)
+		{
+			final targetAlpha:Float = strum.alpha * multAlpha;
+			if (alpha != targetAlpha) alpha = targetAlpha;
+		}
 
-		if(copyX)
-			x = strum.x + offsetX + Math.cos(strum.direction * Math.PI / 180) * distance;
+		if (copyX)
+		{
+			final targetX:Float = strum.x + offsetX + strum.directionCos * distance;
+			if (!ClientPrefs.cacheNoteTransforms || x != targetX) x = targetX;
+		}
 
 		if(copyY)
 		{
-			y = strum.y + offsetY + (!isSustainNote || strum.downScroll ? 0 : 55) + Math.sin(strum.direction * Math.PI / 180) * distance;
+			final targetY:Float = strum.y + offsetY + (!isSustainNote || strum.downScroll ? 0 : 55) + strum.directionSin * distance;
+			if (!ClientPrefs.cacheNoteTransforms || y != targetY) y = targetY;
 			if(strum.downScroll && isSustainNote)
 			{
-				if(PlayState.isPixelStage)
+				if(pixelNote)
 				{
 					y -= PlayState.daPixelZoom * 9.5;
 				}
@@ -500,51 +676,98 @@ class Note extends FlxSprite
 			}
 		}
 
-		if(copyScaleX)
+		if (copyScaleX)
 		{
-			scale.x = strum.scale.x;
-			if (isSustainNote) updateHitbox();
+			final targetScaleX:Float = strum.scale.x;
+			if (scale.x != targetScaleX) scale.x = targetScaleX;
+			if (isSustainNote) updateHitboxIfNeeded();
 		}
-		if(copyScaleY && !isSustainNote)
+		if (copyScaleY && !isSustainNote)
 		{
-			scale.y = strum.scale.y;
+			final targetScaleY:Float = strum.scale.y;
+			if (scale.y != targetScaleY) scale.y = targetScaleY;
 		}
 	}
 
 	public function clipToStrumNote(myStrum:StrumNote)
 	{
-		final center:Float = myStrum.y + offsetY + Note.swagWidth / 2;
 		if (!isSustainNote || (!mustPress && ignoreNote) ||
 			(mustPress && !wasGoodHit && canBeHit)) return;
 
-		if (clipRect == null) clipRect = FlxRect.get(0, 0, frameWidth, frameHeight);
-		final swagRect = clipRect;
+		final currentFrame:Dynamic = frame;
+		if (currentFrame == null) return;
+		@:privateAccess if (_frame == null) return;
+
+		final center:Float = myStrum.y + offsetY + Note.swagWidth / 2;
+		var clipX:Float = 0;
+		var clipY:Float = 0;
+		var clipWidth:Float = frameWidth;
+		var clipHeight:Float = frameHeight;
 
 		if (myStrum.downScroll)
 		{
 			if (y - offset.y * scale.y + height >= center)
 			{
-				swagRect.height = (center - y) / scale.y;
-				swagRect.y = frameHeight - swagRect.height;
-				swagRect.width = frameWidth;
+				clipHeight = (center - y) / scale.y;
+				clipY = frameHeight - clipHeight;
 			}
 		}
 		else if (y + offset.y * scale.y <= center)
 		{
-			swagRect.y = (center - y) / scale.y;
-			swagRect.height = (height / scale.y) - swagRect.y;
-			swagRect.width = width / scale.x;
+			clipY = (center - y) / scale.y;
+			clipHeight = (height / scale.y) - clipY;
+			clipWidth = width / scale.x;
 		}
 
-		// Bypass accessor + directly update _frame like the Codename approach
+		// A sustain that has not reached the receptor needs no clipping at all.
+		// Keep the full-frame state cached without allocating a FlxRect or clipped frame.
+		if (clipRect == null && clipX == 0 && clipY == 0 &&
+			clipWidth == frameWidth && clipHeight == frameHeight)
+		{
+			clipCacheFrame = currentFrame;
+			clipCacheX = clipX;
+			clipCacheY = clipY;
+			clipCacheWidth = clipWidth;
+			clipCacheHeight = clipHeight;
+			clipCacheValid = true;
+			return;
+		}
+
+		// frame.clipTo() is relatively expensive. Skip it when this sustain's
+		// frame and effective clip rectangle are identical to the previous frame.
+		if (ClientPrefs.cacheSustainClipping && clipCacheValid && clipCacheFrame == currentFrame && clipCacheX == clipX &&
+			clipCacheY == clipY && clipCacheWidth == clipWidth && clipCacheHeight == clipHeight)
+			return;
+
+		if (clipRect == null)
+		{
+			@:bypassAccessor clipRect = FlxRect.get(clipX, clipY, clipWidth, clipHeight);
+		}
+		else
+		{
+			clipRect.x = clipX;
+			clipRect.y = clipY;
+			clipRect.width = clipWidth;
+			clipRect.height = clipHeight;
+		}
+
+		final swagRect:FlxRect = clipRect;
 		@:bypassAccessor clipRect = swagRect;
-		@:privateAccess if (frame != null && _frame != null)
-			_frame = frame.clipTo(swagRect, _frame);
+		@:privateAccess if (_frame != null)
+			_frame = currentFrame.clipTo(swagRect, _frame);
 		dirty = true;
+
+		clipCacheFrame = currentFrame;
+		clipCacheX = clipX;
+		clipCacheY = clipY;
+		clipCacheWidth = clipWidth;
+		clipCacheHeight = clipHeight;
+		clipCacheValid = true;
 	}
 
 	@:noCompletion
 	override function set_clipRect(rect:FlxRect):FlxRect {
+		clipCacheValid = false;
 		@:bypassAccessor clipRect = rect;
 
 		@:privateAccess if (frame != null) {
@@ -689,7 +912,7 @@ class Note extends FlxSprite
 			noteSplashData.texture = 'noteSplashes/HURTnoteSplashes';
 		}
 
-		if (PlayState.isPixelStage)
+		if (pixelNote)
 		{
 			@:privateAccess reloadNote(texture);
 			if (isSustainNote && !firstOffX)
@@ -699,10 +922,10 @@ class Note extends FlxSprite
 			}
 		}
 
-		if (!changeSize && !PlayState.isPixelStage)
+		if (!changeSize && !pixelNote)
 		{
 			changeSize = true;
-			setGraphicSize(Std.int(width * 0.7));
+			setGraphicSize(Std.int(width * mobile.MobileOptimization.noteDisplayScale(0.7)));
 			updateHitbox();
 		}
 
@@ -713,7 +936,7 @@ class Note extends FlxSprite
 			updateHitbox();
 			offsetX -= width / 2;
 
-			if (!PlayState.isPixelStage)
+			if (!pixelNote)
 				sustainScale = Note.SUSTAIN_SIZE / frameHeight;
 
 			updateHitbox();
@@ -730,7 +953,9 @@ class Note extends FlxSprite
 		}
 		angle = 0;
 
-		clipRect = null;
+		// the clipRect setter re-clips the frame every time; only pay for it when a previous sustain left a clip behind
+		if (clipRect != null) clipRect = null;
+		else clipCacheValid = false;
 		if (!mustPress)
 		{
 			visible = ClientPrefs.opponentStrums;
