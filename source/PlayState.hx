@@ -3291,7 +3291,6 @@ class PlayState extends MusicBeatState
 		updateCrossFadeGroup(grpCrossFade, elapsed);
 		updateCrossFadeGroup(grpGFCrossFade, elapsed);
 		updateCrossFadeGroup(grpBFCrossFade, elapsed);
-		syncMotionBlurTrails();
 
 		if (ffmpegMode) elapsed = 1 / ClientPrefs.targetFPS;
 		syncMotionBlurShader(elapsed);
