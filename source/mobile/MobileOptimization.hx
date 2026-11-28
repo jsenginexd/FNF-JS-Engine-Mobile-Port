@@ -15,7 +15,9 @@ import openfl.geom.Matrix;
 class MobileOptimization
 {
 	/** Scale the original 5470px Sparrow note atlas to 3500px wide on mobile. */
-	public static inline var NOTE_TEXTURE_QUALITY:Float = 3500.0 / 5470.0;
+	// Keep the original 5470px note atlas on mobile. Downsampling it and
+	// scaling it back up discarded edge detail and made arrows look jagged.
+	public static inline var NOTE_TEXTURE_QUALITY:Float = 1.0;
 	/** 70% source resolution for selected stage backgrounds and effects. */
 	public static inline var BACKGROUND_TEXTURE_QUALITY:Float = 0.70;
 	public static inline var NOTE_DISPLAY_COMPENSATION:Float = 1.0 / NOTE_TEXTURE_QUALITY;
