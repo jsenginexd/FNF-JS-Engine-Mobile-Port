@@ -81,6 +81,16 @@ class PlayState extends MusicBeatState
 	public var grpCrossFade:FlxTypedGroup<CrossFade>;
 	public var grpGFCrossFade:FlxTypedGroup<CrossFade>;
 	public var grpBFCrossFade:FlxTypedGroup<CrossFade>;
+	// Small character-only motion trails. Keeping notes and the HUD untouched avoids
+	// multiplying draw work across dense charts.
+	private var motionBlurTrailGroup:FlxTypedGroup<FlxTrail>;
+	private var boyfriendMotionTrail:FlxTrail;
+	private var dadMotionTrail:FlxTrail;
+	private var gfMotionTrail:FlxTrail;
+	private var boyfriendMotionTrailTarget:Character;
+	private var dadMotionTrailTarget:Character;
+	private var gfMotionTrailTarget:Character;
+	private var motionBlurAppliedStrength:Float = -1;
 	public var shaderUpdates:Array<Float->Void> = [];
 	var botplayUsed:Bool = false;
 	public static var curStage:String = '';
@@ -669,6 +679,10 @@ class PlayState extends MusicBeatState
 		add(grpCrossFade);
 		add(grpGFCrossFade);
 		add(grpBFCrossFade);
+
+		// Render the afterimages immediately behind the character groups.
+		motionBlurTrailGroup = new FlxTypedGroup<FlxTrail>(3);
+		add(motionBlurTrailGroup);
 
 		add(gfGroup); //Needed for blammed lights
 
@@ -3216,6 +3230,82 @@ class PlayState extends MusicBeatState
 		group.active = false;
 	}
 
+	private function removeMotionBlurTrail(trail:FlxTrail):Void
+	{
+		if (trail == null || motionBlurTrailGroup == null) return;
+		motionBlurTrailGroup.remove(trail, true);
+		trail.destroy();
+	}
+
+	private function createMotionBlurTrail(target:Character):FlxTrail
+	{
+		if (target == null || target.graphic == null || motionBlurTrailGroup == null) return null;
+
+		final strength:Float = Math.max(0.1, Math.min(1.0, motionBlurAppliedStrength));
+		final trailAlpha:Float = 0.10 + strength * 0.18;
+		// Three pooled snapshots are enough for a subtle afterimage without a
+		// full-screen framebuffer or a blur pass over every note.
+		final trail:FlxTrail = new FlxTrail(target, null, 3, 1, trailAlpha, trailAlpha / 4);
+		trail.cameras = [camGame];
+		trail.antialiasing = target.antialiasing;
+		trail.visible = target.visible && target.alpha > 0.05;
+		motionBlurTrailGroup.add(trail);
+		return trail;
+	}
+
+	private function syncMotionBlurTrails():Void
+	{
+		if (motionBlurTrailGroup == null) return;
+
+		if (!ClientPrefs.motionBlur)
+		{
+			removeMotionBlurTrail(boyfriendMotionTrail);
+			removeMotionBlurTrail(dadMotionTrail);
+			removeMotionBlurTrail(gfMotionTrail);
+			boyfriendMotionTrail = dadMotionTrail = gfMotionTrail = null;
+			boyfriendMotionTrailTarget = dadMotionTrailTarget = gfMotionTrailTarget = null;
+			motionBlurAppliedStrength = -1;
+			return;
+		}
+
+		final strength:Float = Math.max(0.1, Math.min(1.0, ClientPrefs.motionBlurStrength));
+		if (Math.abs(strength - motionBlurAppliedStrength) > 0.001)
+		{
+			removeMotionBlurTrail(boyfriendMotionTrail);
+			removeMotionBlurTrail(dadMotionTrail);
+			removeMotionBlurTrail(gfMotionTrail);
+			boyfriendMotionTrail = dadMotionTrail = gfMotionTrail = null;
+			boyfriendMotionTrailTarget = dadMotionTrailTarget = gfMotionTrailTarget = null;
+			motionBlurAppliedStrength = strength;
+		}
+
+		if (boyfriendMotionTrailTarget != boyfriend || (boyfriendMotionTrail == null && boyfriend != null && boyfriend.graphic != null))
+		{
+			removeMotionBlurTrail(boyfriendMotionTrail);
+			boyfriendMotionTrailTarget = boyfriend;
+			boyfriendMotionTrail = createMotionBlurTrail(boyfriend);
+		}
+		if (dadMotionTrailTarget != dad || (dadMotionTrail == null && dad != null && dad.graphic != null))
+		{
+			removeMotionBlurTrail(dadMotionTrail);
+			dadMotionTrailTarget = dad;
+			dadMotionTrail = createMotionBlurTrail(dad);
+		}
+		if (gfMotionTrailTarget != gf || (gfMotionTrail == null && gf != null && gf.graphic != null))
+		{
+			removeMotionBlurTrail(gfMotionTrail);
+			gfMotionTrailTarget = gf;
+			gfMotionTrail = createMotionBlurTrail(gf);
+		}
+
+		if (boyfriendMotionTrail != null)
+			boyfriendMotionTrail.visible = boyfriend != null && boyfriend.visible && boyfriend.alpha > 0.05;
+		if (dadMotionTrail != null)
+			dadMotionTrail.visible = dad != null && dad.visible && dad.alpha > 0.05;
+		if (gfMotionTrail != null)
+			gfMotionTrail.visible = gf != null && gf.visible && gf.alpha > 0.05;
+	}
+
 	override public function update(elapsed:Float)
 	{
 		#if mobile
@@ -3228,6 +3318,7 @@ class PlayState extends MusicBeatState
 		updateCrossFadeGroup(grpCrossFade, elapsed);
 		updateCrossFadeGroup(grpGFCrossFade, elapsed);
 		updateCrossFadeGroup(grpBFCrossFade, elapsed);
+		syncMotionBlurTrails();
 
 		if (ffmpegMode) elapsed = 1 / ClientPrefs.targetFPS;
 		if (screenshader.enabled)
