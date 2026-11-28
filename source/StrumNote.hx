@@ -175,7 +175,7 @@ class StrumNote extends FlxSprite
 
 		// Apply filtering last so atlas/animation reloads cannot leave receptors
 		// with the pixel-art default on regular stages.
-		mobile.MobileOptimization.applyNoteSmoothing(this, PlayState.isPixelStage);
+		mobile.MobileOptimization.applyNoteSmoothing(this, mobile.MobileOptimization.usePixelNoteSkin(PlayState.isPixelStage));
 	}
 
 	public function postAddedToGroup() {
