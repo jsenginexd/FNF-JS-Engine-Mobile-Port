@@ -47,7 +47,7 @@ class Paths
   public static function initDefaultSkin(?noteSkin:String, ?inEditor:Bool = false)
   {
     if (noteSkin.length > 0) defaultSkin = noteSkin;
-    else if (!PlayState.isPixelStage) defaultSkin = 'noteskins/NOTE_assets' + Note.getNoteSkinPostfix();
+    else if (!mobile.MobileOptimization.usePixelNoteSkin(PlayState.isPixelStage)) defaultSkin = 'noteskins/NOTE_assets' + Note.getNoteSkinPostfix();
     else
       defaultSkin = 'noteskins/NOTE_assets';
     trace(defaultSkin);
