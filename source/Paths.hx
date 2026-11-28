@@ -46,8 +46,19 @@ class Paths
   // Function that initializes the first note. This way, we can recycle the notes
   public static function initDefaultSkin(?noteSkin:String, ?inEditor:Bool = false)
   {
-    if (noteSkin.length > 0) defaultSkin = noteSkin;
-    else if (!mobile.MobileOptimization.usePixelNoteSkin(PlayState.isPixelStage)) defaultSkin = 'noteskins/NOTE_assets' + Note.getNoteSkinPostfix();
+    if (noteSkin != null && noteSkin.length > 0)
+    {
+      #if mobile
+      // Mobile uses the smooth atlas. Pixel-only custom skins fall back to it.
+      defaultSkin = Paths.fileExists('images/' + noteSkin + '.png', IMAGE)
+        ? noteSkin
+        : 'noteskins/NOTE_assets' + Note.getNoteSkinPostfix();
+      #else
+      defaultSkin = noteSkin;
+      #end
+    }
+    else if (!mobile.MobileOptimization.usePixelNoteSkin(PlayState.isPixelStage))
+      defaultSkin = 'noteskins/NOTE_assets' + Note.getNoteSkinPostfix();
     else
       defaultSkin = 'noteskins/NOTE_assets';
     trace(defaultSkin);
