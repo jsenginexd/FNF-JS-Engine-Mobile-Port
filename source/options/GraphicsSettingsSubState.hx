@@ -36,15 +36,15 @@ class GraphicsSettingsSubState extends BaseOptionsMenu
     addOption(option);
 
     final option:Option = new Option('Motion Blur',
-      'Adds a short afterimage trail to the active characters. It does not blur the notes or HUD. Disabled by default to avoid extra mobile rendering work.',
+      'Enables a 9-sample GLSL motion blur on the gameplay camera. It follows note travel and camera movement; the HUD stays clear. Disabled by default.',
       'motionBlur', 'bool', false);
     addOption(option);
 
     final option:Option = new Option('Motion Blur Strength',
-      'Controls the opacity and length of character afterimage trails (up to 12). Higher values are more visible and may cost extra GPU time.',
+      'Controls shader blur intensity from 0 to 12. Higher values create a longer, stronger directional smear and use more GPU time.',
       'motionBlurStrength', 'float', 12.0);
     option.scrollSpeed = 0.25;
-    option.minValue = 0.1;
+    option.minValue = 0;
     option.maxValue = 12;
     option.changeValue = 0.1;
     option.decimals = 1;
