@@ -41,13 +41,13 @@ class GraphicsSettingsSubState extends BaseOptionsMenu
     addOption(option);
 
     final option:Option = new Option('Motion Blur Strength',
-      'Controls the opacity of the character motion trails. Takes effect during gameplay.',
-      'motionBlurStrength', 'float', 0.35);
+      'Controls the opacity and length of character afterimage trails (up to 12). Higher values are more visible and may cost extra GPU time.',
+      'motionBlurStrength', 'float', 12.0);
     option.scrollSpeed = 0.25;
     option.minValue = 0.1;
-    option.maxValue = 1;
-    option.changeValue = 0.05;
-    option.decimals = 2;
+    option.maxValue = 12;
+    option.changeValue = 0.1;
+    option.decimals = 1;
     option.displayFormat = '%v';
     addOption(option);
 
