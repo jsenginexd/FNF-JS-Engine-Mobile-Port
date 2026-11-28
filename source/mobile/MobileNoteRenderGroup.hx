@@ -1,7 +1,7 @@
 package mobile;
 
 import flixel.FlxCamera;
-import flixel.group.FlxTypedGroup;
+import flixel.group.FlxGroup.FlxTypedGroup;
 
 /**
  * Mobile-only note group with a compact indexed draw traversal.
@@ -12,7 +12,6 @@ import flixel.group.FlxTypedGroup;
  */
 class MobileNoteRenderGroup extends FlxTypedGroup<Note>
 {
-	@:privateAccess
 	override public function draw():Void
 	{
 		if (!ClientPrefs.fastMobileNoteRenderLoop)
@@ -21,10 +20,10 @@ class MobileNoteRenderGroup extends FlxTypedGroup<Note>
 			return;
 		}
 
-		final previousCameras:Array<FlxCamera> = FlxCamera._defaultCameras;
+		final previousCameras:Array<FlxCamera> = @:privateAccess FlxCamera._defaultCameras;
 		final groupCameras:Array<FlxCamera> = cameras;
 		if (groupCameras != null)
-			FlxCamera._defaultCameras = groupCameras;
+			@:privateAccess FlxCamera._defaultCameras = groupCameras;
 
 		final drawMembers:Array<Note> = members;
 		final drawCount:Int = drawMembers.length;
@@ -37,6 +36,6 @@ class MobileNoteRenderGroup extends FlxTypedGroup<Note>
 			index++;
 		}
 
-		FlxCamera._defaultCameras = previousCameras;
+		@:privateAccess FlxCamera._defaultCameras = previousCameras;
 	}
 }
