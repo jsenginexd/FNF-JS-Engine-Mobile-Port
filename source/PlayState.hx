@@ -639,7 +639,7 @@ class PlayState extends MusicBeatState
 
 		if (Note.globalRgbShaders.length > 0) Note.globalRgbShaders = [];
 		Paths.initDefaultSkin(SONG.arrowSkin);
-		Paths.initNote(SONG.arrowSkin);
+		Paths.initNote(Paths.defaultSkin);
 
 		if(isPixelStage) {
 			introSoundsSuffix = '-pixel';
