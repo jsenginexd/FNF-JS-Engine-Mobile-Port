@@ -63,7 +63,7 @@ class StrumNote extends FlxSprite
 			rgbShader.enabled = false;
 
 			var arr:Array<FlxColor> = ClientPrefs.arrowRGB[leData];
-			if(PlayState.isPixelStage) arr = ClientPrefs.arrowRGBPixel[leData];
+			if(mobile.MobileOptimization.usePixelNoteSkin(PlayState.isPixelStage)) arr = ClientPrefs.arrowRGBPixel[leData];
 			if(arr != null && leData <= arr.length)
 			{
 				@:bypassAccessor
@@ -97,7 +97,7 @@ class StrumNote extends FlxSprite
 		var lastAnim:String = null;
 		if(animation.curAnim != null) lastAnim = animation.curAnim.name;
 
-		if(PlayState.isPixelStage)
+		if(mobile.MobileOptimization.usePixelNoteSkin(PlayState.isPixelStage))
 		{
 			loadGraphic(Paths.image('pixelUI/' + texture));
 			width = width / 4;
@@ -139,7 +139,7 @@ class StrumNote extends FlxSprite
 			animation.addByPrefix('purple', 'arrowLEFT');
 			animation.addByPrefix('red', 'arrowRIGHT');
 
-			mobile.MobileOptimization.applyNoteSmoothing(this, PlayState.isPixelStage);
+			mobile.MobileOptimization.applyNoteSmoothing(this, mobile.MobileOptimization.usePixelNoteSkin(PlayState.isPixelStage));
 			setGraphicSize(Std.int(width * 0.7));
 
 			switch (Math.abs(noteData) % 4)
