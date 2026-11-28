@@ -219,6 +219,11 @@ class Note extends FlxSprite
 
 	private inline function getCachedNoteDistance(songPosition:Float, songSpeed:Float, downScroll:Bool):Float
 	{
+		if (!ClientPrefs.cacheNoteDistance)
+		{
+			final uncached:Float = 0.45 * (songPosition - strumTime) * songSpeed * multSpeed;
+			return downScroll ? uncached : -uncached;
+		}
 		if (!noteDistanceCacheValid || noteDistanceCacheSongSpeed != songSpeed ||
 			noteDistanceCacheMultSpeed != multSpeed)
 		{
@@ -234,7 +239,7 @@ class Note extends FlxSprite
 
 	private inline function updateHitboxIfNeeded():Void
 	{
-		if (!hitboxCacheValid || hitboxScaleX != scale.x || hitboxScaleY != scale.y ||
+		if (!ClientPrefs.cacheSustainHitbox || !hitboxCacheValid || hitboxScaleX != scale.x || hitboxScaleY != scale.y ||
 			hitboxFrameWidth != frameWidth || hitboxFrameHeight != frameHeight)
 		{
 			updateHitbox();
@@ -651,12 +656,16 @@ class Note extends FlxSprite
 			if (alpha != targetAlpha) alpha = targetAlpha;
 		}
 
-		if(copyX)
-			x = strum.x + offsetX + strum.directionCos * distance;
+		if (copyX)
+		{
+			final targetX:Float = strum.x + offsetX + strum.directionCos * distance;
+			if (!ClientPrefs.cacheNoteTransforms || x != targetX) x = targetX;
+		}
 
 		if(copyY)
 		{
-			y = strum.y + offsetY + (!isSustainNote || strum.downScroll ? 0 : 55) + strum.directionSin * distance;
+			final targetY:Float = strum.y + offsetY + (!isSustainNote || strum.downScroll ? 0 : 55) + strum.directionSin * distance;
+			if (!ClientPrefs.cacheNoteTransforms || y != targetY) y = targetY;
 			if(strum.downScroll && isSustainNote)
 			{
 				if(pixelNote)
