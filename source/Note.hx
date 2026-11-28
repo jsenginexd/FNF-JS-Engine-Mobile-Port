@@ -264,6 +264,11 @@ class Note extends FlxSprite
 
 	private function set_texture(value:String):String {
 		if (value.length == 0) value = Paths.defaultSkin;
+		#if mobile
+		// Mod charts may name a pixel-only skin. If its full-resolution atlas is
+		// absent, fall back to the shared smooth atlas instead of loading null.
+		if (!pixelNote && !Paths.fileExists('images/$value.png', IMAGE)) value = Paths.defaultSkin;
+		#end
 		if (!pixelNote && texture != value)
 		{
 			changeSize = false;
@@ -364,7 +369,8 @@ class Note extends FlxSprite
 				var newRGB:RGBPalette = new RGBPalette();
 				globalRgbShaders[noteData] = newRGB;
 
-				var arr:Array<FlxColor> = ClientPrefs.noteColorStyle != 'Quant-Based' ? (note != null && note.pixelNote) ? ClientPrefs.arrowRGBPixel[noteData] : ClientPrefs.arrowRGB[noteData] : ClientPrefs.quantRGB[noteData];
+				final usePixelColors:Bool = note != null ? note.pixelNote : mobile.MobileOptimization.usePixelNoteSkin(PlayState.isPixelStage);
+				var arr:Array<FlxColor> = ClientPrefs.noteColorStyle != 'Quant-Based' ? (usePixelColors ? ClientPrefs.arrowRGBPixel[noteData] : ClientPrefs.arrowRGB[noteData]) : ClientPrefs.quantRGB[noteData];
 				if (arr != null && noteData > -1 && noteData <= arr.length)
 				{
 					newRGB.r = arr[0];
