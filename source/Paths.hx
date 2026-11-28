@@ -569,6 +569,12 @@ class Paths
       bitmap = mobile.MobileOptimization.downsampleBitmap(bitmap, imageQuality);
     #end
 
+    #if mobile
+    final imageQuality:Float = mobile.MobileOptimization.imageQualityForPath(key);
+    if (imageQuality < 0.999)
+      bitmap = mobile.MobileOptimization.downsampleBitmap(bitmap, imageQuality);
+    #end
+
     if (ClientPrefs.cacheOnGPU && bitmap.image != null && !pixelReadExclusions.contains(key))
     {
       bitmap.lock();
@@ -744,24 +750,15 @@ class Paths
   {
     var imageLoaded:FlxGraphic = image(key, parentFolder);
     var atlasXml:Dynamic = null;
-    var modXmlPath:String = null;
-    var useModXml:Bool = false;
     #if MODS_ALLOWED
-    modXmlPath = modsXml(key);
+    var modXmlPath:String = modsXml(key);
     if (FileSystem.exists(modXmlPath))
-    {
-      useModXml = true;
       atlasXml = File.getContent(modXmlPath);
-    }
     else
     #end
     {
       final xmlPath:String = getPath('images/$key' + '.xml', TEXT, parentFolder);
-      #if MODS_ALLOWED
       atlasXml = OpenFlAssets.getText(xmlPath);
-      #else
-      atlasXml = OpenFlAssets.getText(xmlPath);
-      #end
     }
 
     #if mobile
