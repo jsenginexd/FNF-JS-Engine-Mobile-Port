@@ -14,8 +14,8 @@ import openfl.geom.Matrix;
  */
 class MobileOptimization
 {
-	/** 85% source resolution for note textures; the displayed size is compensated. */
-	public static inline var NOTE_TEXTURE_QUALITY:Float = 0.85;
+	/** Scale the original 5470px Sparrow note atlas to 3500px wide on mobile. */
+	public static inline var NOTE_TEXTURE_QUALITY:Float = 3500.0 / 5470.0;
 	/** 70% source resolution for selected stage backgrounds and effects. */
 	public static inline var BACKGROUND_TEXTURE_QUALITY:Float = 0.70;
 	public static inline var NOTE_DISPLAY_COMPENSATION:Float = 1.0 / NOTE_TEXTURE_QUALITY;
@@ -62,6 +62,15 @@ class MobileOptimization
 			final document:Xml = Xml.parse(xmlText);
 			final root:Xml = document.firstElement();
 			if (root == null) return xmlText;
+			// Keep the atlas root dimensions consistent with the resized bitmap.
+			for (attribute in ["width", "height"])
+			{
+				if (root.exists(attribute))
+				{
+					final original:Float = Std.parseFloat(root.get(attribute));
+					if (!Math.isNaN(original)) root.set(attribute, Std.string(Math.round(original * quality)));
+				}
+			}
 			final attributes:Array<String> = ["x", "y", "width", "height", "frameX", "frameY", "frameWidth", "frameHeight"];
 			for (subTexture in root.elements())
 			{
@@ -85,27 +94,16 @@ class MobileOptimization
 	}
 
 	/** Preserve the original on-screen arrow dimensions after reducing source pixels. */
-	/** Android uses the compact 4x5 mobile atlas for all note skins. */
+	/** Use pixelUI only for pixel stages; normal stages keep the full Sparrow atlas. */
 	public static inline function usePixelNoteSkin(pixelStage:Bool):Bool
 	{
-		#if mobile
-		return true;
-		#else
 		return pixelStage;
-		#end
 	}
 
-	/** The 40x25 source has 10x5 cells; compensate to retain 17x17 display geometry. */
+	/** Original pixelUI cells are 17x17; retain their native proportions. */
 	public static inline function setCompactPixelNoteSize(sprite:FlxSprite, baseScale:Float):Void
 	{
-		#if mobile
-		sprite.setGraphicSize(
-			Std.int(sprite.width * baseScale * 1.7),
-			Std.int(sprite.height * baseScale * 3.4)
-		);
-		#else
 		sprite.setGraphicSize(Std.int(sprite.width * baseScale));
-		#end
 	}
 
 	public static inline function noteDisplayScale(baseScale:Float):Float
