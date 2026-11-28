@@ -3243,10 +3243,13 @@ class PlayState extends MusicBeatState
 
 		final strength:Float = Math.max(0.1, Math.min(12.0, motionBlurAppliedStrength));
 		final normalizedStrength:Float = strength / 12.0;
-		final trailAlpha:Float = 0.18 + normalizedStrength * 0.72;
-		// Twelve snapshots create a clearly visible character afterimage. This
-		// remains character-only: notes and HUD are not blurred.
-		final trail:FlxTrail = new FlxTrail(target, null, 12, 1, trailAlpha, trailAlpha / 12);
+		// Scale both persistence and opacity with the setting. At the maximum,
+		// 18 temporal samples make character motion more visibly smeared without
+		// applying an expensive full-screen blur pass to dense note charts.
+		final trailLength:Int = 12 + Std.int(Math.round(normalizedStrength * 6));
+		final trailAlpha:Float = 0.30 + normalizedStrength * 0.60;
+		final trailDifference:Float = trailAlpha / (trailLength + 1);
+		final trail:FlxTrail = new FlxTrail(target, null, trailLength, 1, trailAlpha, trailDifference);
 		trail.cameras = [camGame];
 		trail.antialiasing = target.antialiasing;
 		trail.visible = target.visible && target.alpha > 0.05;
