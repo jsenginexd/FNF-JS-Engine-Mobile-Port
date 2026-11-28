@@ -87,6 +87,9 @@ class ClientPrefs { //default settings if it can't find a save file containing y
 	public static var lowQuality:Bool = false;
 	public static var globalAntialiasing:Bool = true;
 	public static var shaders:Bool = true;
+	// Lightweight character motion trails, disabled by default to protect mobile frame time.
+	public static var motionBlur:Bool = false;
+	public static var motionBlurStrength:Float = 0.35;
 	// phones: upload textures to the GPU and free the CPU copy (much less RAM, fewer out-of-memory closes)
 	public static var cacheOnGPU:Bool = #if mobile true #else false #end;
 	public static var dynamicSpawnTime:Bool = false;
