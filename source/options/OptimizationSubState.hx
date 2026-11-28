@@ -108,6 +108,32 @@ class OptimizationSubState extends BaseOptionsMenu
       'Reuses early/late hit-window multiplications while timing preferences stay unchanged. Hit timing comparisons remain the same.',
       'cacheNoteHitWindows', 'bool', true);
     addOption(option);
+
+    final option:Option = new Option('Cache Note Distance',
+      'Caches the song-speed multiplier used for note movement. Disable only to compare the original uncached calculation.',
+      'cacheNoteDistance', 'bool', true);
+    addOption(option);
+
+    final option:Option = new Option('Cache Note Transforms',
+      'Avoids rewriting identical note X/Y coordinates when the target transform has not changed. Notes still move every frame when needed.',
+      'cacheNoteTransforms', 'bool', true);
+    addOption(option);
+
+    final option:Option = new Option('Cache Sustain Hitbox',
+      'Rebuilds sustain hitboxes only when frame dimensions or scale change, reducing repeated CPU work.',
+      'cacheSustainHitbox', 'bool', true);
+    addOption(option);
+
+    final option:Option = new Option('Batched Botplay Skips',
+      'Uses the existing callback-safe batch path for ordinary overdue Botplay notes. Special note types and Lua charts keep the normal path.',
+      'batchBotplaySkips', 'bool', #if mobile true #else false #end);
+    addOption(option);
+
+    final option:Option = new Option('Fast Mobile Note Render Loop',
+      'Uses a compact indexed draw loop for note groups while preserving Flixel camera routing, draw order, full-size textures and note visibility.',
+      'fastMobileNoteRenderLoop', 'bool', #if mobile true #else false #end);
+    addOption(option);
+
     final option:Option = new Option('Max Rendered Notes: ', "The max amount of notes that the game can render onscreen.\nTo remove this limit, set it to 0.",
       'maxNotes', 'int', 0);
     addOption(option);
