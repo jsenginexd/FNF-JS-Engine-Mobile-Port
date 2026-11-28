@@ -12,6 +12,19 @@ import flixel.FlxSprite;
 class MobileOptimization
 {
 	/**
+	 * On Android, do not upscale the tiny 60x40 pixelUI arrow atlas.
+	 * The shared note atlas contains the full-resolution art and is filtered
+	 * smoothly; pixel styling remains available on desktop pixel stages.
+	 */
+	public static inline function usePixelNoteSkin(pixelStage:Bool):Bool
+	{
+		#if mobile
+		return false;
+		#else
+		return pixelStage;
+		#end
+	}
+	/**
 	 * Apply the correct filtering policy to note and receptor sprites.
 	 * This does not change sprite dimensions, note count, animation frames,
 	 * hitboxes, timing, or sustain geometry.
