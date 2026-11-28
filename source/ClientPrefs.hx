@@ -117,6 +117,12 @@ class ClientPrefs { //default settings if it can't find a save file containing y
 	public static var noSkipFuncs:Bool = false;
 	public static var lessBotLag:Bool = #if mobile true #else false #end;
 	public static var maxNotes:Int = 0;
+	// Optional mobile/gameplay hot-path controls. Enabled by default for performance.
+	public static var fastMobileNoteUpdates:Bool = #if mobile true #else false #end;
+	public static var adaptiveNoteSorting:Bool = true;
+	public static var cacheSustainScale:Bool = true;
+	public static var cacheSustainClipping:Bool = true;
+	public static var cacheNoteHitWindows:Bool = true;
 
 	//Secret Debug
 	public static var noGunsRNG:Bool = false;

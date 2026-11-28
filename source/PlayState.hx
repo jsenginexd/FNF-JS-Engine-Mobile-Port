@@ -1088,7 +1088,7 @@ class PlayState extends MusicBeatState
 		#if mobile
 		// Note updates are dispatched through a direct array walk after super.update.
 		// Keep the group drawable/recyclable but skip FlxTypedGroup's callback pass.
-		sustainNotes.active = false;
+		sustainNotes.active = !ClientPrefs.fastMobileNoteUpdates;
 		#end
 		add(sustainNotes);
 
@@ -1097,7 +1097,7 @@ class PlayState extends MusicBeatState
 
 		notes = new FlxTypedGroup<Note>();
 		#if mobile
-		notes.active = false;
+		notes.active = !ClientPrefs.fastMobileNoteUpdates;
 		#end
 		add(notes);
 		notes.visible = sustainNotes.visible = ClientPrefs.showNotes; //that was easier than expected
@@ -3384,7 +3384,7 @@ class PlayState extends MusicBeatState
 		// inactive on mobile to avoid that generic callback traversal; reproduce
 		// the same alive/active checks with tight indexed loops instead. Botplay's
 		// Note.update exits immediately, so skip the entire pass while cpuControlled.
-		if (!cpuControlled)
+		if (ClientPrefs.fastMobileNoteUpdates && !cpuControlled)
 		{
 			updateMobileNoteGroup(sustainNotes, activeSustainChartNotes, elapsed);
 			updateMobileNoteGroup(notes, activeChartNotes, elapsed);
@@ -3707,7 +3707,7 @@ class PlayState extends MusicBeatState
 					}
 
 					final totalNotes:Int = noteLength + sustainLength;
-					final sortInterval:Int = totalNotes > 2000 ? 8 : (totalNotes > 400 ? 4 : 1);
+					final sortInterval:Int = ClientPrefs.adaptiveNoteSorting ? (totalNotes > 2000 ? 8 : (totalNotes > 400 ? 4 : 1)) : 1;
 					#if LUA_ALLOWED
 					if (luaArray.length > 0)
 					{

@@ -548,7 +548,7 @@ class Note extends FlxSprite
 
 		final songPosition:Float = Conductor.songPosition;
 		final safeZone:Float = Conductor.safeZoneOffset;
-		if (!hitWindowCacheValid || hitWindowCacheSafeZone != safeZone ||
+		if (!ClientPrefs.cacheNoteHitWindows || !hitWindowCacheValid || hitWindowCacheSafeZone != safeZone ||
 			hitWindowCacheLateMult != lateHitMult || hitWindowCacheEarlyMult != earlyHitMult)
 		{
 			cachedLateHitWindow = safeZone * lateHitMult;
@@ -600,7 +600,7 @@ class Note extends FlxSprite
 			final stepCrochet:Float = Conductor.stepCrochet;
 			final pixelStage:Bool = pixelNote;
 			final pixelZoom:Float = PlayState.daPixelZoom;
-			if (!sustainScaleCacheValid || sustainScaleCacheStepCrochet != stepCrochet ||
+			if (!ClientPrefs.cacheSustainScale || !sustainScaleCacheValid || sustainScaleCacheStepCrochet != stepCrochet ||
 				sustainScaleCacheSongSpeed != songSpeed || sustainScaleCacheMultSpeed != multSpeed ||
 				sustainScaleCacheNoteScale != sustainScale || sustainScaleCachePixelZoom != pixelZoom ||
 				sustainScaleCachePixelStage != pixelStage || sustainScaleCacheIsEnd != cachedSustainIsEnd)
@@ -726,7 +726,7 @@ class Note extends FlxSprite
 
 		// frame.clipTo() is relatively expensive. Skip it when this sustain's
 		// frame and effective clip rectangle are identical to the previous frame.
-		if (clipCacheValid && clipCacheFrame == currentFrame && clipCacheX == clipX &&
+		if (ClientPrefs.cacheSustainClipping && clipCacheValid && clipCacheFrame == currentFrame && clipCacheX == clipX &&
 			clipCacheY == clipY && clipCacheWidth == clipWidth && clipCacheHeight == clipHeight)
 			return;
 

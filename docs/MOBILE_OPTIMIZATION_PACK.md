@@ -149,3 +149,15 @@ BotPlay charts before claiming a device-side FPS gain.
     rolling window and compact the arrays only after a large consumed prefix.
     This avoids shifting every surviving hit/date pair on each update while
     preserving the same rolling-window sums.
+
+## Five new gameplay optimization controls
+
+The Optimization menu exposes five switches for the note hot paths:
+
+- **Fast Mobile Note Updates**: uses compact active-note arrays rather than Flixel's generic group update traversal on mobile. Disabling it restores the normal group update path; it does not remove notes or alter timing.
+- **Adaptive Note Sorting**: keeps the 1/4/8-frame large-chart sort cadence. Disabling it forces a sort interval of one frame.
+- **Cache Sustain Scale**: reuses sustain scale calculations until an input changes.
+- **Cache Sustain Clipping**: skips repeated frame clipping while the frame and clip rectangle are unchanged.
+- **Cache Note Hit Windows**: reuses early/late hit-window products while timing preferences remain unchanged.
+
+All five are enabled by default on mobile. The regular note atlas remains full resolution (NOTE_TEXTURE_QUALITY = 1.0), and Smooth Note Textures remains enabled by default for regular, non-pixel-art notes and receptors. These controls do not remove chart notes, sustain pieces, or animation frames.

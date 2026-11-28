@@ -84,6 +84,30 @@ class OptimizationSubState extends BaseOptionsMenu
     option.displayFormat = '%v Effects';
     addOption(option);
 
+    final option:Option = new Option('Fast Mobile Note Updates',
+      'Uses compact active-note arrays instead of generic Flixel group traversal on mobile. Keeps every note and hit check. Applied when the next song starts.',
+      'fastMobileNoteUpdates', 'bool', #if mobile true #else false #end);
+    addOption(option);
+
+    final option:Option = new Option('Adaptive Note Sorting',
+      'Sorts large charts less often when note membership changes are rare: every 4 frames above 400 notes and every 8 above 2,000. Turn off for a sort every frame.',
+      'adaptiveNoteSorting', 'bool', true);
+    addOption(option);
+
+    final option:Option = new Option('Cache Sustain Scale',
+      'Reuses sustain scale calculations until BPM, scroll speed, skin scale or sustain type changes. Disable only for troubleshooting.',
+      'cacheSustainScale', 'bool', true);
+    addOption(option);
+
+    final option:Option = new Option('Cache Sustain Clipping',
+      'Skips repeated frame clipping when a sustain has the same frame and clip rectangle as the previous update.',
+      'cacheSustainClipping', 'bool', true);
+    addOption(option);
+
+    final option:Option = new Option('Cache Note Hit Windows',
+      'Reuses early/late hit-window multiplications while timing preferences stay unchanged. Hit timing comparisons remain the same.',
+      'cacheNoteHitWindows', 'bool', true);
+    addOption(option);
     final option:Option = new Option('Max Rendered Notes: ', "The max amount of notes that the game can render onscreen.\nTo remove this limit, set it to 0.",
       'maxNotes', 'int', 0);
     addOption(option);
