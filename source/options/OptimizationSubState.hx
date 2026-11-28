@@ -74,6 +74,16 @@ class OptimizationSubState extends BaseOptionsMenu
     final option:Option = new Option('Even LESS Botplay Lag', "On mobile this is enabled by default. During BotPlay, keeps hit sounds, notes, receptors and character animations but skips rating popups, note splashes and hit-image overlays to reduce per-note visual allocations.", 'lessBotLag', 'bool', #if mobile true #else false #end);
     addOption(option);
 
+    final option:Option = new Option('Max Active Splash Pool',
+      'Caps the reusable note-splash and sustain-splash sprites created for a song. Lower values limit retained effect objects during dense charts. This does not limit, hide, resize or reduce note textures. Applied when the next song starts.',
+      'maxSplashLimit', 'int', #if mobile 8 #else 16 #end);
+    option.scrollSpeed = 12;
+    option.minValue = 2;
+    option.maxValue = 64;
+    option.changeValue = 2;
+    option.displayFormat = '%v Effects';
+    addOption(option);
+
     final option:Option = new Option('Max Rendered Notes: ', "The max amount of notes that the game can render onscreen.\nTo remove this limit, set it to 0.",
       'maxNotes', 'int', 0);
     addOption(option);
