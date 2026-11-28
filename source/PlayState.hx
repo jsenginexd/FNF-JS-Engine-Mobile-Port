@@ -5967,10 +5967,11 @@ class PlayState extends MusicBeatState
 				// Keep the same overdue-note throughput budget in both BotPlay paths.
 				// The old 400-note fallback caused a permanent backlog whenever Lua,
 				// shake effects, or custom note callbacks disabled the fast path.
-				// At 60 FPS, 20000 notes/frame allows up to 1.2M overdue notes/second.
-				// Do not silently lower this budget for charts that use callbacks.
+				// At 60 FPS, 34000 notes/frame allows up to 2.04M overdue notes/second.
+				// This is a hard ceiling, not guaranteed throughput; special notes and callbacks
+				// still use the original gameplay path to preserve their behavior.
 				#if mobile
-				final maxSkippedNotesPerFrame:Int = 20000;
+				final maxSkippedNotesPerFrame:Int = 34000;
 				var processedSkippedNotes:Int = 0;
 				#end
 				while (targetNote.strumTime <= Conductor.songPosition - ClientPrefs.noteOffset
