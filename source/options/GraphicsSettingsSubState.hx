@@ -36,7 +36,7 @@ class GraphicsSettingsSubState extends BaseOptionsMenu
     addOption(option);
 
     final option:Option = new Option('Motion Blur',
-      'Enables a 9-sample GLSL motion blur on the gameplay camera. It follows note travel and camera movement; the HUD stays clear. Disabled by default.',
+      'Enables a 9-sample GLSL motion blur on the gameplay camera. It follows note travel and camera movement; the HUD stays clear. Requires Shaders to be enabled.',
       'motionBlur', 'bool', false);
     addOption(option);
 
