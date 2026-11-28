@@ -569,11 +569,6 @@ class Paths
       bitmap = mobile.MobileOptimization.downsampleBitmap(bitmap, imageQuality);
     #end
 
-    #if mobile
-    final imageQuality:Float = mobile.MobileOptimization.imageQualityForPath(key);
-    if (imageQuality < 0.999)
-      bitmap = mobile.MobileOptimization.downsampleBitmap(bitmap, imageQuality);
-    #end
 
     if (ClientPrefs.cacheOnGPU && bitmap.image != null && !pixelReadExclusions.contains(key))
     {
