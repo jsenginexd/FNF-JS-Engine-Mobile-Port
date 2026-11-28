@@ -563,6 +563,12 @@ class Paths
       }
     }
 
+    #if mobile
+    final imageQuality:Float = mobile.MobileOptimization.imageQualityForPath(key);
+    if (imageQuality < 0.999)
+      bitmap = mobile.MobileOptimization.downsampleBitmap(bitmap, imageQuality);
+    #end
+
     if (ClientPrefs.cacheOnGPU && bitmap.image != null && !pixelReadExclusions.contains(key))
     {
       bitmap.lock();
@@ -737,16 +743,33 @@ class Paths
   inline static public function getSparrowAtlas(key:String, ?parentFolder:String = null):FlxAtlasFrames
   {
     var imageLoaded:FlxGraphic = image(key, parentFolder);
+    var atlasXml:Dynamic = null;
+    var modXmlPath:String = null;
+    var useModXml:Bool = false;
     #if MODS_ALLOWED
-    var xmlExists:Bool = false;
-
-    var xml:String = modsXml(key);
-    if (FileSystem.exists(xml)) xmlExists = true;
-
-    return FlxAtlasFrames.fromSparrow(imageLoaded, (xmlExists ? File.getContent(xml) : getPath('images/$key' + '.xml', TEXT, parentFolder)));
-    #else
-    return FlxAtlasFrames.fromSparrow(imageLoaded, getPath('images/$key' + '.xml', TEXT, parentFolder));
+    modXmlPath = modsXml(key);
+    if (FileSystem.exists(modXmlPath))
+    {
+      useModXml = true;
+      atlasXml = File.getContent(modXmlPath);
+    }
+    else
     #end
+    {
+      final xmlPath:String = getPath('images/$key' + '.xml', TEXT, parentFolder);
+      #if MODS_ALLOWED
+      atlasXml = OpenFlAssets.getText(xmlPath);
+      #else
+      atlasXml = OpenFlAssets.getText(xmlPath);
+      #end
+    }
+
+    #if mobile
+    final atlasQuality:Float = mobile.MobileOptimization.imageQualityForPath('images/$key.png');
+    if (atlasQuality < 0.999 && atlasXml != null)
+      atlasXml = mobile.MobileOptimization.scaleSparrowXml(Std.string(atlasXml), atlasQuality);
+    #end
+    return FlxAtlasFrames.fromSparrow(imageLoaded, atlasXml);
   }
 
   inline static public function getPackerAtlas(key:String, ?parentFolder:String = null):FlxAtlasFrames
