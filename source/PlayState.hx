@@ -3241,11 +3241,12 @@ class PlayState extends MusicBeatState
 	{
 		if (target == null || target.graphic == null || motionBlurTrailGroup == null) return null;
 
-		final strength:Float = Math.max(0.1, Math.min(1.0, motionBlurAppliedStrength));
-		final trailAlpha:Float = 0.10 + strength * 0.18;
-		// Three pooled snapshots are enough for a subtle afterimage without a
-		// full-screen framebuffer or a blur pass over every note.
-		final trail:FlxTrail = new FlxTrail(target, null, 3, 1, trailAlpha, trailAlpha / 4);
+		final strength:Float = Math.max(0.1, Math.min(12.0, motionBlurAppliedStrength));
+		final normalizedStrength:Float = strength / 12.0;
+		final trailAlpha:Float = 0.18 + normalizedStrength * 0.72;
+		// Twelve snapshots create a clearly visible character afterimage. This
+		// remains character-only: notes and HUD are not blurred.
+		final trail:FlxTrail = new FlxTrail(target, null, 12, 1, trailAlpha, trailAlpha / 12);
 		trail.cameras = [camGame];
 		trail.antialiasing = target.antialiasing;
 		trail.visible = target.visible && target.alpha > 0.05;
@@ -3268,7 +3269,7 @@ class PlayState extends MusicBeatState
 			return;
 		}
 
-		final strength:Float = Math.max(0.1, Math.min(1.0, ClientPrefs.motionBlurStrength));
+		final strength:Float = Math.max(0.1, Math.min(12.0, ClientPrefs.motionBlurStrength));
 		if (Math.abs(strength - motionBlurAppliedStrength) > 0.001)
 		{
 			removeMotionBlurTrail(boyfriendMotionTrail);
@@ -6062,7 +6063,7 @@ class PlayState extends MusicBeatState
 				// This is a hard ceiling, not guaranteed throughput; special notes and callbacks
 				// still use the original gameplay path to preserve their behavior.
 				#if mobile
-				final maxSkippedNotesPerFrame:Int = 34000;
+				final maxSkippedNotesPerFrame:Int = 40000;
 				var processedSkippedNotes:Int = 0;
 				#end
 				while (targetNote.strumTime <= Conductor.songPosition - ClientPrefs.noteOffset
