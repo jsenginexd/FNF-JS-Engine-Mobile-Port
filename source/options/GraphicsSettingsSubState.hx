@@ -35,6 +35,22 @@ class GraphicsSettingsSubState extends BaseOptionsMenu
       true); // Default value
     addOption(option);
 
+    final option:Option = new Option('Motion Blur',
+      'Adds a short afterimage trail to the active characters. It does not blur the notes or HUD. Disabled by default to avoid extra mobile rendering work.',
+      'motionBlur', 'bool', false);
+    addOption(option);
+
+    final option:Option = new Option('Motion Blur Strength',
+      'Controls the opacity of the character motion trails. Takes effect during gameplay.',
+      'motionBlurStrength', 'float', 0.35);
+    option.scrollSpeed = 0.25;
+    option.minValue = 0.1;
+    option.maxValue = 1;
+    option.changeValue = 0.05;
+    option.decimals = 2;
+    option.displayFormat = '%v';
+    addOption(option);
+
     final option:Option = new Option('GPU Caching', // Name
       "If checked, allows the GPU to be used for caching textures, decreasing RAM usage.\nDon't turn this on if you have a shitty Graphics Card.", // Description
       'cacheOnGPU', 'bool', false); // Don't turn this on by default
