@@ -7,12 +7,17 @@ than copied as incompatible C++.
 
 ## Visual quality (implemented)
 
-1. **Scale-aware note filtering**: non-pixel note and receptor sprites use
-   antialiasing on mobile; pixel-art notes remain nearest-neighbour/crisp.
-2. **Sustain seam overlap**: adjacent sustain pieces overlap slightly to hide
+1. **Full-resolution mobile note atlas**: Android uses the shared
+   5470x238 note atlas instead of enlarging the 60x40 pixelUI atlas on pixel
+   stages. The latter caused visibly blocky arrows and sustain pieces.
+2. **Linear note sampling**: mobile note and receptor sprites use smooth
+   filtering and sub-pixel placement after every atlas reload. Stage art keeps
+   its normal pixel-art behavior.
+3. **Sustain seam overlap**: adjacent sustain pieces overlap slightly to hide
    atlas/filter seams without changing hit timing or note count.
-3. **No visual LOD that removes notes**: every chart note and animation frame
-   remains available. Do not cap visible notes to fake an FPS increase.
+4. **No visual LOD that removes notes**: every chart note, sustain segment, and
+   gameplay animation frame remains available. Do not cap visible notes to fake
+   an FPS increase.
 
 ## Runtime optimizations already present on the mobile branch
 
