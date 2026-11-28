@@ -13,6 +13,7 @@ import StageData;
 import editors.CharacterEditorState;
 import editors.ChartingState;
 import flixel.addons.effects.FlxTrail;
+import mobile.MotionBlurShader;
 import flixel.input.keyboard.FlxKey;
 import flixel.ui.FlxBar;
 import flixel.util.FlxSort;
@@ -81,16 +82,12 @@ class PlayState extends MusicBeatState
 	public var grpCrossFade:FlxTypedGroup<CrossFade>;
 	public var grpGFCrossFade:FlxTypedGroup<CrossFade>;
 	public var grpBFCrossFade:FlxTypedGroup<CrossFade>;
-	// Small character-only motion trails. Keeping notes and the HUD untouched avoids
-	// multiplying draw work across dense charts.
-	private var motionBlurTrailGroup:FlxTypedGroup<FlxTrail>;
-	private var boyfriendMotionTrail:FlxTrail;
-	private var dadMotionTrail:FlxTrail;
-	private var gfMotionTrail:FlxTrail;
-	private var boyfriendMotionTrailTarget:Character;
-	private var dadMotionTrailTarget:Character;
-	private var gfMotionTrailTarget:Character;
-	private var motionBlurAppliedStrength:Float = -1;
+	// One camera-level GLSL pass replaces the old sprite-afterimage trail effect.
+	private var motionBlurShader:MotionBlurShader;
+	private var motionBlurShaderAttached:Bool = false;
+	private var motionBlurLastScrollX:Float = 0.0;
+	private var motionBlurLastScrollY:Float = 0.0;
+	private var motionBlurHasLastScroll:Bool = false;
 	public var shaderUpdates:Array<Float->Void> = [];
 	var botplayUsed:Bool = false;
 	public static var curStage:String = '';
@@ -679,10 +676,6 @@ class PlayState extends MusicBeatState
 		add(grpCrossFade);
 		add(grpGFCrossFade);
 		add(grpBFCrossFade);
-
-		// Render the afterimages immediately behind the character groups.
-		motionBlurTrailGroup = new FlxTypedGroup<FlxTrail>(3);
-		add(motionBlurTrailGroup);
 
 		add(gfGroup); //Needed for blammed lights
 
@@ -3230,84 +3223,60 @@ class PlayState extends MusicBeatState
 		group.active = false;
 	}
 
-	private function removeMotionBlurTrail(trail:FlxTrail):Void
+	private function syncMotionBlurShader(elapsed:Float):Void
 	{
-		if (trail == null || motionBlurTrailGroup == null) return;
-		motionBlurTrailGroup.remove(trail, true);
-		trail.destroy();
-	}
+		if (camGame == null) return;
 
-	private function createMotionBlurTrail(target:Character):FlxTrail
-	{
-		if (target == null || target.graphic == null || motionBlurTrailGroup == null) return null;
+		final scrollX:Float = camGame.scroll.x;
+		final scrollY:Float = camGame.scroll.y;
+		final cameraMotionX:Float = motionBlurHasLastScroll ? motionBlurLastScrollX - scrollX : 0.0;
+		final cameraMotionY:Float = motionBlurHasLastScroll ? motionBlurLastScrollY - scrollY : 0.0;
 
-		final strength:Float = Math.max(0.1, Math.min(12.0, motionBlurAppliedStrength));
-		final normalizedStrength:Float = strength / 12.0;
-		// Scale both persistence and opacity with the setting. At the maximum,
-		// 18 temporal samples make character motion more visibly smeared without
-		// applying an expensive full-screen blur pass to dense note charts.
-		final trailLength:Int = 12 + Std.int(Math.round(normalizedStrength * 6));
-		final trailAlpha:Float = 0.30 + normalizedStrength * 0.60;
-		final trailDifference:Float = trailAlpha / (trailLength + 1);
-		final trail:FlxTrail = new FlxTrail(target, null, trailLength, 1, trailAlpha, trailDifference);
-		trail.cameras = [camGame];
-		trail.antialiasing = target.antialiasing;
-		trail.visible = target.visible && target.alpha > 0.05;
-		motionBlurTrailGroup.add(trail);
-		return trail;
-	}
+		motionBlurLastScrollX = scrollX;
+		motionBlurLastScrollY = scrollY;
+		motionBlurHasLastScroll = true;
 
-	private function syncMotionBlurTrails():Void
-	{
-		if (motionBlurTrailGroup == null) return;
-
-		if (!ClientPrefs.motionBlur)
+		if (!ClientPrefs.motionBlur || !ClientPrefs.shaders)
 		{
-			removeMotionBlurTrail(boyfriendMotionTrail);
-			removeMotionBlurTrail(dadMotionTrail);
-			removeMotionBlurTrail(gfMotionTrail);
-			boyfriendMotionTrail = dadMotionTrail = gfMotionTrail = null;
-			boyfriendMotionTrailTarget = dadMotionTrailTarget = gfMotionTrailTarget = null;
-			motionBlurAppliedStrength = -1;
+			if (motionBlurShaderAttached && motionBlurShader != null)
+			{
+				camGame.removeShader(motionBlurShader);
+				motionBlurShaderAttached = false;
+			}
 			return;
 		}
 
-		final strength:Float = Math.max(0.1, Math.min(12.0, ClientPrefs.motionBlurStrength));
-		if (Math.abs(strength - motionBlurAppliedStrength) > 0.001)
+		if (motionBlurShader == null)
+			motionBlurShader = new MotionBlurShader();
+
+		final musicPlaying:Bool = FlxG.sound.music != null && FlxG.sound.music.playing;
+		final safeElapsed:Float = Math.max(0.0, Math.min(0.05, elapsed));
+		final strength:Float = Math.max(0.0, Math.min(12.0, ClientPrefs.motionBlurStrength));
+
+		// FNF notes travel roughly 450 * songSpeed game pixels per second.
+		// Combine that vertical movement with camera movement so the blur tracks
+		// the visible motion instead of leaving a permanent static smear.
+		var noteMotionY:Float = 0.0;
+		if (musicPlaying && generatedMusic && !endingSong)
 		{
-			removeMotionBlurTrail(boyfriendMotionTrail);
-			removeMotionBlurTrail(dadMotionTrail);
-			removeMotionBlurTrail(gfMotionTrail);
-			boyfriendMotionTrail = dadMotionTrail = gfMotionTrail = null;
-			boyfriendMotionTrailTarget = dadMotionTrailTarget = gfMotionTrailTarget = null;
-			motionBlurAppliedStrength = strength;
+			final travel:Float = Math.min(30.0, Math.abs(songSpeed) * safeElapsed * 450.0);
+			noteMotionY = ClientPrefs.downScroll ? travel : -travel;
 		}
 
-		if (boyfriendMotionTrailTarget != boyfriend || (boyfriendMotionTrail == null && boyfriend != null && boyfriend.graphic != null))
-		{
-			removeMotionBlurTrail(boyfriendMotionTrail);
-			boyfriendMotionTrailTarget = boyfriend;
-			boyfriendMotionTrail = createMotionBlurTrail(boyfriend);
-		}
-		if (dadMotionTrailTarget != dad || (dadMotionTrail == null && dad != null && dad.graphic != null))
-		{
-			removeMotionBlurTrail(dadMotionTrail);
-			dadMotionTrailTarget = dad;
-			dadMotionTrail = createMotionBlurTrail(dad);
-		}
-		if (gfMotionTrailTarget != gf || (gfMotionTrail == null && gf != null && gf.graphic != null))
-		{
-			removeMotionBlurTrail(gfMotionTrail);
-			gfMotionTrailTarget = gf;
-			gfMotionTrail = createMotionBlurTrail(gf);
-		}
+		final motionX:Float = cameraMotionX;
+		final motionY:Float = cameraMotionY + noteMotionY;
+		final shouldAttach:Bool = musicPlaying && motionBlurShader.setMotion(motionX, motionY, strength);
 
-		if (boyfriendMotionTrail != null)
-			boyfriendMotionTrail.visible = boyfriend != null && boyfriend.visible && boyfriend.alpha > 0.05;
-		if (dadMotionTrail != null)
-			dadMotionTrail.visible = dad != null && dad.visible && dad.alpha > 0.05;
-		if (gfMotionTrail != null)
-			gfMotionTrail.visible = gf != null && gf.visible && gf.alpha > 0.05;
+		if (shouldAttach && !motionBlurShaderAttached)
+		{
+			camGame.addShader(motionBlurShader);
+			motionBlurShaderAttached = true;
+		}
+		else if (!shouldAttach && motionBlurShaderAttached)
+		{
+			camGame.removeShader(motionBlurShader);
+			motionBlurShaderAttached = false;
+		}
 	}
 
 	override public function update(elapsed:Float)
@@ -3325,6 +3294,7 @@ class PlayState extends MusicBeatState
 		syncMotionBlurTrails();
 
 		if (ffmpegMode) elapsed = 1 / ClientPrefs.targetFPS;
+		syncMotionBlurShader(elapsed);
 		if (screenshader.enabled)
 		{
 			if(disableTheTripperAt <= curStep || isDead)
@@ -6790,6 +6760,10 @@ class PlayState extends MusicBeatState
 		Note.globalRgbShaders = [];
 		backend.NoteTypesConfig.clearNoteTypesData();
 
+		if (motionBlurShaderAttached && camGame != null && motionBlurShader != null)
+			camGame.removeShader(motionBlurShader);
+		motionBlurShaderAttached = false;
+		motionBlurShader = null;
 		super.destroy();
 	}
 
