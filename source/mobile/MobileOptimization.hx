@@ -14,9 +14,7 @@ import openfl.geom.Matrix;
  */
 class MobileOptimization
 {
-	/** Scale the original 5470px Sparrow note atlas to 3500px wide on mobile. */
-	// Keep the original 5470px note atlas on mobile. Downsampling it and
-	// scaling it back up discarded edge detail and made arrows look jagged.
+	/** Keep the full-resolution 5470px Sparrow note atlas on mobile. */
 	public static inline var NOTE_TEXTURE_QUALITY:Float = 1.0;
 	/** 70% source resolution for selected stage backgrounds and effects. */
 	public static inline var BACKGROUND_TEXTURE_QUALITY:Float = 0.70;
@@ -31,10 +29,11 @@ class MobileOptimization
 		if (normalized.indexOf("noteskins/") >= 0 && normalized.indexOf("pixelui/") < 0)
 			return NOTE_TEXTURE_QUALITY;
 
-		if (normalized.indexOf("images/stages/") >= 0 || normalized.indexOf("images/backgrounds/") >= 0 ||
-			normalized.indexOf("images/effects/") >= 0 || normalized.indexOf("images/particles/") >= 0 ||
-			normalized.indexOf("images/stageback.") >= 0 || normalized.indexOf("images/stagefront.") >= 0 ||
-			normalized.indexOf("images/stagecurtains.") >= 0 || normalized.indexOf("images/stage_light.") >= 0)
+		if (ClientPrefs.reduceBackgroundTextures &&
+			(normalized.indexOf("images/stages/") >= 0 || normalized.indexOf("images/backgrounds/") >= 0 ||
+			 normalized.indexOf("images/effects/") >= 0 || normalized.indexOf("images/particles/") >= 0 ||
+			 normalized.indexOf("images/stageback.") >= 0 || normalized.indexOf("images/stagefront.") >= 0 ||
+			 normalized.indexOf("images/stagecurtains.") >= 0 || normalized.indexOf("images/stage_light.") >= 0))
 			return BACKGROUND_TEXTURE_QUALITY;
 		#end
 		return 1.0;
@@ -126,7 +125,7 @@ class MobileOptimization
 		#if mobile
 		// Keep the two visual modes separate: pixel skins stay crisp and snapped;
 		// regular atlases are smoothly sampled and may move at sub-pixel positions.
-		sprite.antialiasing = !pixelArt;
+		sprite.antialiasing = ClientPrefs.smoothNotes && !pixelArt;
 		sprite.pixelPerfectRender = pixelArt;
 		sprite.pixelPerfectPosition = pixelArt;
 		#else
