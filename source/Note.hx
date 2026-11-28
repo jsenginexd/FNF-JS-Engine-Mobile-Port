@@ -281,7 +281,7 @@ class Note extends FlxSprite
 			if (!changeSize)
 			{
 				changeSize = true;
-				setGraphicSize(Std.int(width * 0.7));
+				setGraphicSize(Std.int(width * mobile.MobileOptimization.noteDisplayScale(0.7)));
 				updateHitbox();
 			}
 			offsetX = 0;
@@ -491,7 +491,7 @@ class Note extends FlxSprite
 				animation.addByPrefix(colArray[noteData] + 'holdend', colArray[noteData] + ' hold end');
 				animation.addByPrefix(colArray[noteData] + 'hold', colArray[noteData] + ' hold piece');
 			}
-			setGraphicSize(Std.int(width * 0.7));
+			setGraphicSize(Std.int(width * mobile.MobileOptimization.noteDisplayScale(0.7)));
 			if(!isSustainNote)
 			{
 				centerOffsets();
@@ -617,7 +617,7 @@ class Note extends FlxSprite
 			}
 			else
 			{
-				final sustainScaleX:Float = pixelNote ? PlayState.daPixelZoom * 0.7 : 0.7;
+				final sustainScaleX:Float = pixelNote ? PlayState.daPixelZoom * 0.7 : mobile.MobileOptimization.noteDisplayScale(0.7);
 				if (scale.x != sustainScaleX || scale.y != sustainScaleY)
 					scale.set(sustainScaleX, sustainScaleY);
 			}
@@ -906,7 +906,7 @@ class Note extends FlxSprite
 		if (!changeSize && !pixelNote)
 		{
 			changeSize = true;
-			setGraphicSize(Std.int(width * 0.7));
+			setGraphicSize(Std.int(width * mobile.MobileOptimization.noteDisplayScale(0.7)));
 			updateHitbox();
 		}
 
