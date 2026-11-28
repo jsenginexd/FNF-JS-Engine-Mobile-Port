@@ -90,6 +90,12 @@ class ClientPrefs { //default settings if it can't find a save file containing y
 	// Screen-space GLSL motion blur on the gameplay camera; disabled by default.
 	public static var motionBlur:Bool = false;
 	public static var motionBlurStrength:Float = 12.0;
+	// Mobile shader quality can trade a few blur samples for much lower GPU cost.
+	public static var motionBlurQuality:String = #if mobile 'Performance' #else 'Quality' #end;
+	// Keep regular note atlases filtered without forcing the global sprite AA setting.
+	public static var smoothNotes:Bool = true;
+	// Reduce selected stage/effect texture memory; note skins are never downsampled.
+	public static var reduceBackgroundTextures:Bool = #if mobile true #else false #end;
 	// phones: upload textures to the GPU and free the CPU copy (much less RAM, fewer out-of-memory closes)
 	public static var cacheOnGPU:Bool = #if mobile true #else false #end;
 	public static var dynamicSpawnTime:Bool = false;
