@@ -20,6 +20,22 @@ class OptimizationSubState extends BaseOptionsMenu
       'enableGC', 'bool', true);
     addOption(option);
 
+    final option:Option = new Option('Smooth Note Textures',
+      'Uses linear GPU sampling for regular note skins and receptors while keeping the original full-resolution note atlas. Pixel-art stages stay crisp.',
+      'smoothNotes', 'bool', true);
+    addOption(option);
+
+    final option:Option = new Option('Motion Blur Quality',
+      'Performance uses 3 shader samples, Balanced uses 5, and Quality uses 9. Fewer samples reduce GPU work without disabling Motion Blur.',
+      'motionBlurQuality', 'string', #if mobile 'Performance' #else 'Quality' #end,
+      ['Performance', 'Balanced', 'Quality']);
+    addOption(option);
+
+    final option:Option = new Option('Stage Texture Saver',
+      'Reduces selected stage, background and effect textures to 70% before GPU upload. Note skins remain full resolution. Restart or reload the stage after changing this.',
+      'reduceBackgroundTextures', 'bool', #if mobile true #else false #end);
+    addOption(option);
+
     final option:Option = new Option('Light Opponent Strums', "If this is unchecked, the Opponent strums won't light up when the Opponent hits a note.",
       'opponentLightStrum', 'bool', true);
     addOption(option);
